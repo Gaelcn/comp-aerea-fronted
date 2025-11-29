@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compañía Aérea - Sistema de Gestión</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background-color: #343a40;
+        }
+        .sidebar .nav-link {
+            color: #fff;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #495057;
+        }
+        .content {
+            padding: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-actions {
+            white-space: nowrap;
+        }
+         .sidebar {
+        min-height: 100vh;
+        background-color: #343a40;
+        }
+        .sidebar .nav-link {
+            color: #fff;
+        }
+        .sidebar .nav-link:hover {
+            background-color: #495057;
+        }
+        .content {
+            padding: 20px;
+        }
+        .card {
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table-actions {
+            white-space: nowrap;
+        }
+        
+        /* Spinner styles */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #007bff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky pt-3">
+                    <h5 class="text-white px-3">Compañía Aérea</h5>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link active" href="#" onclick="showSection('dashboard')">
+                                <i class="fas fa-tachometer-alt"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('aviones')">
+                                <i class="fas fa-plane"></i> Aviones
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('pilotos')">
+                                <i class="fas fa-user-tie"></i> Pilotos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('tripulacion')">
+                                <i class="fas fa-users"></i> Tripulación
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('vuelos')">
+                                <i class="fas fa-route"></i> Vuelos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" onclick="showSection('bases')">
+                                <i class="fas fa-building"></i> Bases
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <!-- Main content -->
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4">
+                <!-- Dashboard Section -->
+                <div id="dashboard" class="content-section">
+                    <h2>Dashboard</h2>
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="card text-white bg-primary">
+                                <div class="card-body">
+                                    <h5 class="card-title" id="totalAviones">0</h5>
+                                    <p class="card-text">Aviones</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-success">
+                                <div class="card-body">
+                                    <h5 class="card-title" id="totalPilotos">0</h5>
+                                    <p class="card-text">Pilotos</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-warning">
+                                <div class="card-body">
+                                    <h5 class="card-title" id="totalTripulacion">0</h5>
+                                    <p class="card-text">Tripulación</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card text-white bg-info">
+                                <div class="card-body">
+                                    <h5 class="card-title" id="totalVuelos">0</h5>
+                                    <p class="card-text">Vuelos</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Aviones Section -->
+                <div id="aviones" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2>Gestión de Aviones</h2>
+                        <button class="btn btn-primary" onclick="showAvionForm()">
+                            <i class="fas fa-plus"></i> Nuevo Avión
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Tipo</th>
+                                    <th>Base</th>
+                                    <th>Fecha Adquisición</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="avionesTable">
+                                <!-- Datos cargados dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pilotos Section -->
+                <div id="pilotos" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2>Gestión de Pilotos</h2>
+                        <button class="btn btn-primary" onclick="showPilotoForm()">
+                            <i class="fas fa-plus"></i> Nuevo Piloto
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Nombre</th>
+                                    <th>Horas de Vuelo</th>
+                                    <th>Base</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="pilotosTable">
+                                <!-- Datos cargados dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Tripulación Section -->
+                <div id="tripulacion" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2>Gestión de Tripulación</h2>
+                        <button class="btn btn-primary" onclick="showTripulanteForm()">
+                            <i class="fas fa-plus"></i> Nuevo Tripulante
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Nombre</th>
+                                    <th>Base</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tripulacionTable">
+                                <!-- Datos cargados dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Vuelos Section -->
+                <div id="vuelos" class="content-section" style="display: none;">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h2>Gestión de Vuelos</h2>
+                        <button class="btn btn-primary" onclick="showVueloForm()">
+                            <i class="fas fa-plus"></i> Nuevo Vuelo
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Número Vuelo</th>
+                                    <th>Origen</th>
+                                    <th>Destino</th>
+                                    <th>Fecha</th>
+                                    <th>Hora</th>
+                                    <th>Estado</th>
+                                    <th>Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="vuelosTable">
+                                <!-- Datos cargados dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Bases Section -->
+                <div id="bases" class="content-section" style="display: none;">
+                    <h2>Bases de la Compañía</h2>
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>Código</th>
+                                    <th>Nombre</th>
+                                    <th>Ubicación</th>
+                                </tr>
+                            </thead>
+                            <tbody id="basesTable">
+                                <!-- Datos cargados dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </main>
+        </div>
+    </div>
+
+    <!-- Modal para formularios -->
+    <div class="modal fade" id="formModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modalTitle">Formulario</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="modalBody">
+                    <!-- Contenido del formulario dinámico -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="app.js"></script>
+    <div id="spinner" class="spinner-overlay hidden">
+        <div class="spinner"></div>
+    </div>
+</body>
+</html>

@@ -39,6 +39,46 @@ async function graphqlQuery(query, variables = {}) {
     }
 }
 
+// Función para formatear fechas desde timestamp
+function formatFecha(timestamp) {
+    if (!timestamp) return 'N/A';
+    
+    try {
+        // Convertir timestamp a fecha
+        const fecha = new Date(parseInt(timestamp));
+        
+        // Verificar si la fecha es válida
+        if (isNaN(fecha.getTime())) {
+            return 'Fecha inválida';
+        }
+        
+        // Formatear a DD/MM/YYYY
+        const dia = fecha.getDate().toString().padStart(2, '0');
+        const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
+        const año = fecha.getFullYear();
+        
+        return `${dia}/${mes}/${año}`;
+    } catch (error) {
+        console.error('Error formateando fecha:', error);
+        return 'Error fecha';
+    }
+}
+
+// Función para formatear fecha para input type="date" (YYYY-MM-DD)
+function formatFechaForInput(timestamp) {
+    if (!timestamp) return '';
+    
+    try {
+        const fecha = new Date(parseInt(timestamp));
+        if (isNaN(fecha.getTime())) return '';
+        
+        return fecha.toISOString().split('T')[0];
+    } catch (error) {
+        console.error('Error formateando fecha para input:', error);
+        return '';
+    }
+}
+
 // Función para el menú hamburguesa en móvil
 function toggleMobileMenu() {
     const mobileSidebar = document.getElementById('mobileSidebar');
@@ -189,7 +229,7 @@ async function loadAviones() {
                 <td>${avion.codigo_avion}</td>
                 <td>${avion.tipo?.nombre_tipo || avion.codigo_tipo}</td>
                 <td>${avion.base?.nombre_base || avion.codigo_base}</td>
-                <td>${avion.fecha_adquisicion || 'N/A'}</td>
+                <td>${formatFecha(avion.fecha_adquisicion)}</td>
                 <td class="table-actions">
                     <button class="btn btn-sm btn-warning" onclick="editAvion('${avion.codigo_avion}')">
                         <i class="fas fa-edit"></i>
@@ -246,7 +286,7 @@ function showAvionForm(avion = null) {
             <div class="mb-3">
                 <label class="form-label">Fecha Adquisición</label>
                 <input type="date" class="form-control" name="fecha_adquisicion" 
-                       value="${avion?.fecha_adquisicion || ''}">
+                    value="${avion?.fecha_adquisicion ? formatFechaForInput(avion.fecha_adquisicion) : ''}">
             </div>
         </form>
     `;
@@ -257,13 +297,16 @@ function showAvionForm(avion = null) {
 async function submitAvionForm(avion) {
     const form = document.getElementById('avionForm');
     const formData = new FormData(form);
+    const fechaInput = formData.get('fecha_adquisicion');
+    
     const input = {
         codigo_avion: formData.get('codigo_avion'),
         codigo_tipo: formData.get('codigo_tipo'),
         codigo_base: formData.get('codigo_base'),
-        fecha_adquisicion: formData.get('fecha_adquisicion') || null
+        fecha_adquisicion: fechaInput ? new Date(fechaInput).getTime().toString() : null
     };
     
+    // El resto del código permanece igual...
     try {
         if (avion) {
             const mutation = `

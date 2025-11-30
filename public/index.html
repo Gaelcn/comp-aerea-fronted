@@ -173,8 +173,55 @@
         text-align: center;
     }
 
-    /* Responsive adjustments */
-    @media (max-width: 768px) {
+    /* Asegurar que el contenido principal esté siempre detrás del menú */
+    .container-fluid {
+        position: relative;
+        z-index: 1;
+    }
+
+    /* Estilos para las secciones de contenido */
+    .content-section {
+        position: relative;
+        z-index: 1;
+        background: white;
+        border-radius: 8px;
+        padding: 20px;
+        margin-top: 0;
+    }
+
+    /* Header dentro del contenido */
+    .content-section h2 {
+        color: #343a40;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #007bff;
+    }
+
+    /* ========== ESTILOS ESPECÍFICOS PARA BOTONES ========== */
+    
+    /* Botones normales en desktop */
+    .btn-primary {
+        background-color: #007bff;
+        border-color: #007bff;
+        color: white;
+    }
+
+    .btn-primary:hover {
+        background-color: #0056b3;
+        border-color: #0056b3;
+    }
+
+    /* Clase específica para botones de acción */
+    .action-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        white-space: nowrap;
+    }
+
+    /* ========== RESPONSIVE ADJUSTMENTS ========== */
+    
+     @media (max-width: 768px) {
         .mobile-header {
             display: flex;
             align-items: center;
@@ -185,10 +232,18 @@
         }
 
         .content {
-            margin-top: 70px;
+            margin-top: 80px; /* Aumentado de 70px a 80px */
             padding: 15px;
             width: 100%;
             margin-left: 0;
+        }
+
+        /* Asegurar que el header de cada sección tenga suficiente espacio */
+        .d-flex.justify-content-between.align-items-center.mb-3 {
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center !important;
+            margin-top: 10px; /* Espacio adicional arriba */
         }
 
         .main-content-wrapper {
@@ -206,6 +261,57 @@
 
         .card-body {
             padding: 1rem;
+        }
+
+        /* ===== CORRECCIÓN MEJORADA PARA BOTONES EN MÓVIL ===== */
+        
+        /* Header de secciones en móvil */
+        .d-flex.justify-content-between.align-items-center.mb-3 {
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center !important;
+        }
+
+        .d-flex.justify-content-between.align-items-center.mb-3 h2 {
+            font-size: 1.5rem;
+            margin-bottom: 0;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        /* Botones de acción principales (Agregar) */
+        .action-btn {
+            display: inline-flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            min-width: auto !important;
+            padding: 10px 15px !important;
+            border-radius: 8px !important;
+            white-space: nowrap;
+            margin: 0 !important;
+        }
+
+        /* Mostrar solo el icono en móvil para botones de acción */
+        .action-btn span.d-none.d-md-inline {
+            display: none !important;
+        }
+        
+        /* Asegurar que el botón sea visible y tenga buen tamaño */
+        .action-btn i {
+            margin: 0 !important;
+            font-size: 1rem;
+        }
+
+        /* Asegurar que el botón no se oculte */
+        .btn-primary.action-btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+
+        /* Ajustar específicamente el contenedor del botón agregar */
+        .d-flex.justify-content-between.align-items-center.mb-3 .btn {
+            flex-shrink: 0;
         }
 
         /* Asegurar que el contenido no se desplace con el menú */
@@ -239,30 +345,127 @@
         body.menu-open .content {
             transform: translateX(250px);
         }
+
+        /* Ajustes específicos para móviles pequeños */
+        .d-flex.justify-content-between.align-items-center.mb-3 {
+            gap: 8px;
+        }
+
+        .d-flex.justify-content-between.align-items-center.mb-3 h2 {
+            font-size: 1.3rem;
+            min-width: 150px;
+        }
+
+        /* Botones más compactos pero siempre visibles */
+        .action-btn {
+            padding: 8px 12px !important;
+            width: auto !important;
+            height: auto !important;
+        }
+    }   
+
+    @media (max-width: 400px) {
+        .d-flex.justify-content-between.align-items-center.mb-3 h2 {
+            font-size: 1.2rem;
+            min-width: 120px;
+        }
+        
+        /* Botones siempre visibles en móvil pequeño */
+        .action-btn {
+            padding: 8px 10px !important;
+            width: auto !important;
+            height: auto !important;
+            min-width: 40px !important;
+        }
+        
+        .action-btn i {
+            font-size: 0.9rem;
+        }
+    }
+    
+    @media (max-width: 768px) {
+        .main-content-wrapper {
+            margin-left: 0 !important;
+            padding-top: 10px; /* Espacio adicional en el contenedor principal */
+        }
+    }
+    @media (max-width: 768px) {
+        .content-section {
+            margin-top: 65px; /* Prueba con 90px si 80px no es suficiente */
+            padding: 15px;
+            width: 100%;
+            margin-left: 0;
+        }
     }
 
-    /* Asegurar que el contenido principal esté siempre detrás del menú */
-    .container-fluid {
-        position: relative;
-        z-index: 1;
+    /* Tooltip mejorado para botones en móvil */
+    @media (max-width: 768px) {
+        .action-btn {
+            position: relative;
+        }
+        
+        .action-btn:hover::after,
+        .action-btn:focus::after {
+            content: attr(title);
+            position: absolute;
+            bottom: -35px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #333;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            white-space: nowrap;
+            z-index: 100;
+        }
+        
+        /* Asegurar que los botones sean táctiles */
+        .action-btn {
+            min-height: 44px;
+            min-width: 44px;
+        }
     }
-
-    /* Estilos para las secciones de contenido */
-    .content-section {
-        position: relative;
-        z-index: 1;
-        background: white;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 0;
+        /* ========== GARANTIZAR VISIBILIDAD DE BOTONES ========== */
+    .btn-primary.action-btn {
+        display: inline-flex !important;
+        visibility: visible !important;
+        opacity: 1 !important;
     }
-
-    /* Header dentro del contenido */
-    .content-section h2 {
-        color: #343a40;
-        margin-bottom: 20px;
-        padding-bottom: 10px;
-        border-bottom: 2px solid #007bff;
+    
+    /* Override para asegurar que los botones se muestren en móvil */
+    @media (max-width: 768px) {
+        .d-flex.justify-content-between.align-items-center.mb-3 .btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            flex-shrink: 0;
+        }
+        
+        /* Forzar que el botón sea visible */
+        .action-btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+        }
+    }
+        /* OVERRIDE DE EMERGENCIA PARA BOTONES */
+    .d-md-inline {
+        display: inline !important;
+    }
+    
+    @media (max-width: 768px) {
+        .d-none.d-md-inline {
+            display: none !important;
+        }
+        
+        /* Esto garantiza que el botón completo se muestre */
+        .btn.action-btn {
+            display: inline-flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            pointer-events: all !important;
+        }
     }
 </style>
 </head>
@@ -404,10 +607,11 @@
 
                 <!-- Aviones Section -->
                 <div id="aviones" class="content-section" style="display: none;">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3 mt-10">
                         <h2>Gestión de Aviones</h2>
-                        <button class="btn btn-primary" onclick="showAvionForm()">
-                            <i class="fas fa-plus"></i> <span class="d-none d-md-inline">Nuevo Avión</span>
+                        <button class="btn btn-primary action-btn" onclick="showAvionForm()" title="Nuevo Avión">
+                            <i class="fas fa-plus"></i> 
+                            <span class="d-none d-md-inline">Nuevo Avión</span>
                         </button>
                     </div>
                     <div class="table-responsive">
@@ -432,9 +636,10 @@
                 <div id="pilotos" class="content-section" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2>Gestión de Pilotos</h2>
-                        <button class="btn btn-primary" onclick="showPilotoForm()">
-                            <i class="fas fa-plus"></i> <span class="d-none d-md-inline">Nuevo Piloto</span>
-                        </button>
+                        <button class="btn btn-primary action-btn" onclick="showPilotoForm()" title="Nuevo Piloto">
+                        <i class="fas fa-plus"></i> 
+                        <span class="d-none d-md-inline">Nuevo Piloto</span>
+                    </button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-striped">
@@ -458,9 +663,10 @@
                 <div id="tripulacion" class="content-section" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2>Gestión de Tripulación</h2>
-                        <button class="btn btn-primary" onclick="showTripulanteForm()">
-                            <i class="fas fa-plus"></i> <span class="d-none d-md-inline">Nuevo Tripulante</span>
-                        </button>
+                       <button class="btn btn-primary action-btn" onclick="showTripulanteForm()" title="Nuevo Tripulante">
+                        <i class="fas fa-plus"></i> 
+                        <span class="d-none d-md-inline">Nuevo Tripulante</span>
+                    </button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-striped">
@@ -483,9 +689,10 @@
                 <div id="vuelos" class="content-section" style="display: none;">
                     <div class="d-flex justify-content-between align-items-center mb-3">
                         <h2>Gestión de Vuelos</h2>
-                        <button class="btn btn-primary" onclick="showVueloForm()">
-                            <i class="fas fa-plus"></i> <span class="d-none d-md-inline">Nuevo Vuelo</span>
-                        </button>
+                      <button class="btn btn-primary action-btn" onclick="showVueloForm()" title="Nuevo Vuelo">
+                        <i class="fas fa-plus"></i> 
+                        <span class="d-none d-md-inline">Nuevo Vuelo</span>
+                    </button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-striped">

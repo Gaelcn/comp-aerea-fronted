@@ -39,6 +39,56 @@ async function graphqlQuery(query, variables = {}) {
     }
 }
 
+// Función para el menú hamburguesa en móvil
+function toggleMobileMenu() {
+    const mobileSidebar = document.getElementById('mobileSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const body = document.body;
+
+    mobileSidebar.classList.toggle('open');
+    overlay.classList.toggle('open');
+    body.classList.toggle('menu-open');
+
+    // Prevenir scroll del body cuando el menú está abierto
+    if (mobileSidebar.classList.contains('open')) {
+        body.style.overflow = 'hidden';
+    } else {
+        body.style.overflow = '';
+    }
+}
+
+// Cerrar menú al hacer clic fuera de él
+document.addEventListener('click', function(event) {
+    const mobileSidebar = document.getElementById('mobileSidebar');
+    const overlay = document.getElementById('sidebarOverlay');
+    const hamburgerBtn = document.querySelector('.hamburger-btn');
+    
+    if (mobileSidebar.classList.contains('open') && 
+        !mobileSidebar.contains(event.target) && 
+        event.target !== hamburgerBtn && 
+        !hamburgerBtn.contains(event.target)) {
+        toggleMobileMenu();
+    }
+});
+
+// Cerrar menú al presionar ESC
+document.addEventListener('keydown', function(event) {
+    if (event.key === 'Escape') {
+        const mobileSidebar = document.getElementById('mobileSidebar');
+        if (mobileSidebar.classList.contains('open')) {
+            toggleMobileMenu();
+        }
+    }
+});
+
+// Ajustar comportamiento en redimensionamiento
+window.addEventListener('resize', function() {
+    const mobileSidebar = document.getElementById('mobileSidebar');
+    if (window.innerWidth > 768 && mobileSidebar.classList.contains('open')) {
+        toggleMobileMenu();
+    }
+});
+
 // Control del spinner
 function showSpinner() {
     document.getElementById('spinner').classList.remove('hidden');

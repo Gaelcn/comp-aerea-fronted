@@ -10,6 +10,131 @@ let appState = {
     tiposAvion: []
 };
 
+// Función de validación reutilizable
+function validateForm(formId) {
+    const form = document.getElementById(formId);
+    
+    if (!form) {
+        console.error('Formulario no encontrado:', formId);
+        return false;
+    }
+    
+    // Limpiar errores previos
+    form.classList.remove('was-validated');
+    form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
+    
+    // Validar todos los campos
+    const isValid = form.checkValidity();
+    
+    if (!isValid) {
+        form.classList.add('was-validated');
+        
+        // Mostrar mensajes de error específicos
+        const inputs = form.querySelectorAll('input, select, textarea');
+        inputs.forEach(input => {
+            if (!input.checkValidity()) {
+                input.classList.add('is-invalid');
+                
+                const errorElement = document.getElementById(`${input.name}_error`);
+                if (errorElement) {
+                    if (input.validity.valueMissing) {
+                        errorElement.textContent = input.tagName === 'SELECT' 
+                            ? 'Por favor seleccione una opción.' 
+                            : 'Este campo es requerido.';
+                    } else if (input.validity.typeMismatch) {
+                        errorElement.textContent = 'Formato incorrecto.';
+                    } else if (input.validity.rangeUnderflow) {
+                        errorElement.textContent = `El valor mínimo es ${input.min}.`;
+                    } else if (input.validity.rangeOverflow) {
+                        errorElement.textContent = `El valor máximo es ${input.max}.`;
+                    } else if (input.validity.patternMismatch) {
+                        errorElement.textContent = 'No coincide con el formato requerido.';
+                    }
+                }
+            }
+        });
+        
+        // Enfocar el primer campo inválido
+        const firstInvalid = form.querySelector('.is-invalid');
+        if (firstInvalid) {
+            firstInvalid.focus();
+        }
+        
+        return false;
+    }
+    
+    return true;
+}
+
+// Validación en tiempo real para formularios (versión mejorada)
+function setupRealTimeValidation(formId) {
+    const form = document.getElementById(formId);
+    if (!form) {
+        console.error('Formulario no encontrado:', formId);
+        return;
+    }
+    
+    // Limpiar event listeners previos si los hay
+    const inputs = form.querySelectorAll('input, select, textarea');
+    
+    inputs.forEach(input => {
+        // Remover event listeners previos
+        const newInput = input.cloneNode(true);
+        input.parentNode.replaceChild(newInput, input);
+    });
+    
+    // Agregar nuevos event listeners
+    const newInputs = form.querySelectorAll('input, select, textarea');
+    
+    newInputs.forEach(input => {
+        input.addEventListener('input', function() {
+            console.log('Input cambiado:', this.name, this.value);
+            
+            // Validar este campo específico
+            const isValid = this.checkValidity();
+            const errorElement = document.getElementById(`${this.name}_error`);
+            
+            if (isValid) {
+                this.classList.remove('is-invalid');
+                if (errorElement) {
+                    errorElement.textContent = '';
+                    errorElement.style.display = 'none';
+                }
+            } else {
+                this.classList.add('is-invalid');
+                if (errorElement) {
+                    if (this.validity.valueMissing) {
+                        errorElement.textContent = this.tagName === 'SELECT' 
+                            ? 'Por favor seleccione una opción.' 
+                            : 'Este campo es requerido.';
+                    }
+                    errorElement.style.display = 'block';
+                }
+            }
+            
+            // Actualizar estado del formulario
+            if (form.checkValidity()) {
+                form.classList.remove('was-validated');
+            }
+        });
+        
+        input.addEventListener('blur', function() {
+            if (!this.checkValidity()) {
+                this.classList.add('is-invalid');
+                const errorElement = document.getElementById(`${this.name}_error`);
+                if (errorElement) {
+                    errorElement.style.display = 'block';
+                }
+            }
+        });
+        
+        input.addEventListener('change', function() {
+            console.log('Cambio en:', this.name, this.value);
+            this.dispatchEvent(new Event('input'));
+        });
+    });
+}
+
 // Utilidad para hacer queries GraphQL con spinner
 async function graphqlQuery(query, variables = {}) {
     showSpinner();
@@ -39,40 +164,200 @@ async function graphqlQuery(query, variables = {}) {
     }
 }
 
-// Función para formatear fechas desde timestamp
-function formatFecha(timestamp) {
-    if (!timestamp) return 'N/A';
+// Función para formatear fechas para mostrar (MySQL YYYY-MM-DD -> DD/MM/YYYY)
+function formatFecha(fecha) {
+    if (!fecha) return 'N/A';
+    
+    console.log('Formateando fecha para mostrar:', fecha, 'Tipo:', typeof fecha);
     
     try {
-        // Convertir timestamp a fecha
-        const fecha = new Date(parseInt(timestamp));
+        // Si es formato MySQL YYYY-MM-DD
+        if (typeof fecha === 'string' && fecha.match(/^\d{4}-\d{2}-\d{2}$/)) {
+            const [año, mes, dia] = fecha.split('-');
+            return `${dia}/${mes}/${año}`;
+        }
+        
+        // Si es timestamp (número o string numérico)
+        if ((typeof fecha === 'string' && !isNaN(fecha)) || typeof fecha === 'number') {
+            const fechaObj = new Date(parseInt(fecha));
+            if (!isNaN(fechaObj.getTime())) {
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                const año = fechaObj.getFullYear();
+                return `${dia}/${mes}/${año}`;
+            }
+        }
+        
+        // Si es cualquier otro string de fecha
+        if (typeof fecha === 'string') {
+            const fechaObj = new Date(fecha);
+            if (!isNaN(fechaObj.getTime())) {
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                const año = fechaObj.getFullYear();
+                return `${dia}/${mes}/${año}`;
+            }
+        }
+        
+        // Devolver el valor original si no podemos formatearlo
+        return fecha;
+        
+    } catch (error) {
+        console.error('Error formateando fecha:', error);
+        return fecha; // Devolver el valor original si hay error
+    }
+}
+
+// Función para formatear fecha de vuelos (maneja diferentes formatos)
+function formatFechaVuelo(fecha) {
+    if (!fecha) return 'N/A';
+    
+    try {
+        // Intentar parsear como timestamp primero
+        let fechaObj;
+        
+        if (typeof fecha === 'string' && !isNaN(fecha)) {
+            // Es un timestamp en string
+            fechaObj = new Date(parseInt(fecha));
+        } else if (typeof fecha === 'number') {
+            // Es un timestamp numérico
+            fechaObj = new Date(fecha);
+        } else if (typeof fecha === 'string') {
+            // Intentar parsear como string de fecha
+            fechaObj = new Date(fecha);
+        } else {
+            return 'Formato inválido';
+        }
         
         // Verificar si la fecha es válida
-        if (isNaN(fecha.getTime())) {
+        if (isNaN(fechaObj.getTime())) {
             return 'Fecha inválida';
         }
         
         // Formatear a DD/MM/YYYY
-        const dia = fecha.getDate().toString().padStart(2, '0');
-        const mes = (fecha.getMonth() + 1).toString().padStart(2, '0');
-        const año = fecha.getFullYear();
+        const dia = fechaObj.getDate().toString().padStart(2, '0');
+        const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+        const año = fechaObj.getFullYear();
         
         return `${dia}/${mes}/${año}`;
     } catch (error) {
-        console.error('Error formateando fecha:', error);
+        console.error('Error formateando fecha de vuelo:', error);
         return 'Error fecha';
     }
 }
 
-// Función para formatear fecha para input type="date" (YYYY-MM-DD)
-function formatFechaForInput(timestamp) {
-    if (!timestamp) return '';
+// Función para formatear hora (mejorada)
+function formatHora(hora) {
+    if (!hora) return 'N/A';
+    
+    console.log('Hora recibida para formatear:', hora, 'Tipo:', typeof hora);
     
     try {
-        const fecha = new Date(parseInt(timestamp));
-        if (isNaN(fecha.getTime())) return '';
+        // Caso 1: Ya es una hora formateada correctamente
+        if (typeof hora === 'string') {
+            // Verificar si es formato HH:MM o HH:MM:SS
+            const horaMatch = hora.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+            if (horaMatch) {
+                const horas = horaMatch[1].padStart(2, '0');
+                const minutos = horaMatch[2];
+                return `${horas}:${minutos}`;
+            }
+            
+            // Verificar si es formato 24h (14:30:00)
+            if (hora.includes(':')) {
+                const partes = hora.split(':');
+                if (partes.length >= 2) {
+                    const horas = partes[0].padStart(2, '0');
+                    const minutos = partes[1].padStart(2, '0');
+                    return `${horas}:${minutos}`;
+                }
+            }
+            
+            // Verificar si es un timestamp numérico en string
+            if (!isNaN(hora) && hora.trim() !== '') {
+                const fecha = new Date(parseInt(hora));
+                if (!isNaN(fecha.getTime())) {
+                    const horas = fecha.getHours().toString().padStart(2, '0');
+                    const minutos = fecha.getMinutes().toString().padStart(2, '0');
+                    return `${horas}:${minutos}`;
+                }
+            }
+        }
         
-        return fecha.toISOString().split('T')[0];
+        // Caso 2: Es un número (timestamp)
+        if (typeof hora === 'number') {
+            const fecha = new Date(hora);
+            if (!isNaN(fecha.getTime())) {
+                const horas = fecha.getHours().toString().padStart(2, '0');
+                const minutos = fecha.getMinutes().toString().padStart(2, '0');
+                return `${horas}:${minutos}`;
+            }
+        }
+        
+        // Caso 3: Es un objeto Date
+        if (hora instanceof Date) {
+            if (!isNaN(hora.getTime())) {
+                const horas = hora.getHours().toString().padStart(2, '0');
+                const minutos = hora.getMinutes().toString().padStart(2, '0');
+                return `${horas}:${minutos}`;
+            }
+        }
+        
+        return 'Formato desconocido';
+        
+    } catch (error) {
+        console.error('Error formateando hora:', error, 'Hora original:', hora);
+        return 'Error formato';
+    }
+}
+
+// Función para formatear fecha para input type="date" (YYYY-MM-DD)
+function formatFechaForInput(fecha) {
+    if (!fecha) return '';
+    
+    console.log('Preparando fecha para input:', fecha, 'Tipo:', typeof fecha);
+    
+    try {
+        // Si ya está en formato YYYY-MM-DD de MySQL, devolverlo tal cual
+        if (typeof fecha === 'string') {
+            // Verificar si es formato MySQL YYYY-MM-DD
+            if (fecha.match(/^\d{4}-\d{2}-\d{2}$/)) {
+                return fecha;
+            }
+            
+            // Verificar si es timestamp
+            if (!isNaN(fecha)) {
+                const fechaObj = new Date(parseInt(fecha));
+                if (!isNaN(fechaObj.getTime())) {
+                    const año = fechaObj.getFullYear();
+                    const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                    const dia = fechaObj.getDate().toString().padStart(2, '0');
+                    return `${año}-${mes}-${dia}`;
+                }
+            }
+            
+            // Intentar parsear como fecha general
+            const fechaObj = new Date(fecha);
+            if (!isNaN(fechaObj.getTime())) {
+                const año = fechaObj.getFullYear();
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                return `${año}-${mes}-${dia}`;
+            }
+        }
+        
+        // Si es número (timestamp)
+        if (typeof fecha === 'number') {
+            const fechaObj = new Date(fecha);
+            if (!isNaN(fechaObj.getTime())) {
+                const año = fechaObj.getFullYear();
+                const mes = (fechaObj.getMonth() + 1).toString().padStart(2, '0');
+                const dia = fechaObj.getDate().toString().padStart(2, '0');
+                return `${año}-${mes}-${dia}`;
+            }
+        }
+        
+        return '';
     } catch (error) {
         console.error('Error formateando fecha para input:', error);
         return '';
@@ -263,38 +548,73 @@ function showAvionForm(avion = null) {
     ).join('');
     
     const form = `
-        <form id="avionForm">
+        <form id="avionForm" novalidate>
             <div class="mb-3">
-                <label class="form-label">Código Avión</label>
+                <label class="form-label">Código Avión <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="codigo_avion" 
                        value="${avion?.codigo_avion || ''}" ${isEdit ? 'readonly' : ''} required>
+                <div class="invalid-feedback" id="codigo_avion_error">
+                    Por favor ingrese el código del avión.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Tipo de Avión</label>
+                <label class="form-label">Tipo de Avión <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_tipo" required>
                     <option value="">Seleccionar tipo</option>
                     ${tiposOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_tipo_error">
+                    Por favor seleccione un tipo de avión.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Base</label>
+                <label class="form-label">Base <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_base" required>
                     <option value="">Seleccionar base</option>
                     ${basesOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_base_error">
+                    Por favor seleccione una base.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Fecha Adquisición</label>
+                <label class="form-label">Fecha Adquisición <span class="text-danger">*</span></label>
                 <input type="date" class="form-control" name="fecha_adquisicion" 
-                    value="${avion?.fecha_adquisicion ? formatFechaForInput(avion.fecha_adquisicion) : ''}">
+                       value="${avion?.fecha_adquisicion ? formatFechaForInput(avion.fecha_adquisicion) : ''}" required>
+                <div class="invalid-feedback" id="fecha_adquisicion_error">
+                    Por favor seleccione una fecha de adquisición.
+                </div>
             </div>
         </form>
     `;
     
     showModal(title, form, () => submitAvionForm(avion));
+    
+    // Configurar validación en tiempo real después de que el modal se muestre
+    const modal = document.getElementById('formModal');
+    
+    // Opción A: Usar evento show.bs.modal de Bootstrap
+    modal.addEventListener('shown.bs.modal', function () {
+        setTimeout(() => {
+            console.log('Configurando validación para avionForm');
+            setupRealTimeValidation('avionForm');
+        }, 50);
+    });
+    
+    // Opción B: Timeout seguro
+    setTimeout(() => {
+        console.log('Configurando validación (timeout) para avionForm');
+        setupRealTimeValidation('avionForm');
+    }, 300);
 }
 
 async function submitAvionForm(avion) {
+    // Validar el formulario antes de proceder
+    if (!validateForm('avionForm')) {
+        return; // Detener si no es válido
+    }
+    
+    // Si es válido, proceder con el envío
     const form = document.getElementById('avionForm');
     const formData = new FormData(form);
     const fechaInput = formData.get('fecha_adquisicion');
@@ -303,10 +623,9 @@ async function submitAvionForm(avion) {
         codigo_avion: formData.get('codigo_avion'),
         codigo_tipo: formData.get('codigo_tipo'),
         codigo_base: formData.get('codigo_base'),
-        fecha_adquisicion: fechaInput ? new Date(fechaInput).getTime().toString() : null
+        fecha_adquisicion: fechaInput || null
     };
     
-    // El resto del código permanece igual...
     try {
         if (avion) {
             const mutation = `
@@ -433,49 +752,76 @@ function showPilotoForm(piloto = null) {
     ).join('');
     
     const form = `
-        <form id="pilotoForm">
+        <form id="pilotoForm" novalidate>
             <div class="mb-3">
-                <label class="form-label">Código Piloto</label>
+                <label class="form-label">Código Piloto <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="codigo_piloto" 
                        value="${piloto?.codigo_piloto || ''}" ${isEdit ? 'readonly' : ''} required>
+                <div class="invalid-feedback" id="codigo_piloto_error">
+                    Por favor ingrese el código del piloto.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Nombre</label>
+                <label class="form-label">Nombre <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="nombre" 
                        value="${piloto?.nombre || ''}" required>
+                <div class="invalid-feedback" id="nombre_error">
+                    Por favor ingrese el nombre del piloto.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Horas de Vuelo</label>
+                <label class="form-label">Horas de Vuelo <span class="text-danger">*</span></label>
                 <input type="number" class="form-control" name="horas_vuelo" 
-                       value="${piloto?.horas_vuelo || 0}" required>
+                       value="${piloto?.horas_vuelo || 0}" min="0" required>
+                <div class="invalid-feedback" id="horas_vuelo_error">
+                    Por favor ingrese las horas de vuelo.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Base</label>
+                <label class="form-label">Base <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_base" required>
                     <option value="">Seleccionar base</option>
                     ${basesOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_base_error">
+                    Por favor seleccione una base.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Fecha Contratación</label>
+                <label class="form-label">Fecha Contratación <span class="text-danger">*</span></label>
                 <input type="date" class="form-control" name="fecha_contratacion" 
-                       value="${piloto?.fecha_contratacion || ''}">
+                       value="${piloto?.fecha_contratacion ? formatFechaForInput(piloto.fecha_contratacion) : ''}" required>
+                <div class="invalid-feedback" id="fecha_contratacion_error">
+                    Por favor seleccione una fecha de contratación.
+                </div>
             </div>
         </form>
     `;
     
     showModal(title, form, () => submitPilotoForm(piloto));
+    
+    // Configurar validación en tiempo real después de mostrar el modal
+    setTimeout(() => {
+        setupRealTimeValidation('pilotoForm');
+    }, 100);
 }
 
 async function submitPilotoForm(piloto) {
+    // Validar el formulario antes de proceder
+    if (!validateForm('pilotoForm')) {
+        return;
+    }
+    
     const form = document.getElementById('pilotoForm');
     const formData = new FormData(form);
+    const fechaInput = formData.get('fecha_contratacion');
+    
     const input = {
         codigo_piloto: formData.get('codigo_piloto'),
         nombre: formData.get('nombre'),
         horas_vuelo: parseInt(formData.get('horas_vuelo')),
         codigo_base: formData.get('codigo_base'),
-        fecha_contratacion: formData.get('fecha_contratacion') || null
+        fecha_contratacion: fechaInput || null
     };
     
     try {
@@ -599,43 +945,67 @@ function showTripulanteForm(tripulante = null) {
     ).join('');
     
     const form = `
-        <form id="tripulanteForm">
+        <form id="tripulanteForm" novalidate>
             <div class="mb-3">
-                <label class="form-label">Código Tripulante</label>
+                <label class="form-label">Código Tripulante <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="codigo_tripulante" 
                        value="${tripulante?.codigo_tripulante || ''}" ${isEdit ? 'readonly' : ''} required>
+                <div class="invalid-feedback" id="codigo_tripulante_error">
+                    Por favor ingrese el código del tripulante.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Nombre</label>
+                <label class="form-label">Nombre <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="nombre" 
                        value="${tripulante?.nombre || ''}" required>
+                <div class="invalid-feedback" id="nombre_error">
+                    Por favor ingrese el nombre del tripulante.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Base</label>
+                <label class="form-label">Base <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_base" required>
                     <option value="">Seleccionar base</option>
                     ${basesOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_base_error">
+                    Por favor seleccione una base.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Fecha Contratación</label>
+                <label class="form-label">Fecha Contratación <span class="text-danger">*</span></label>
                 <input type="date" class="form-control" name="fecha_contratacion" 
-                       value="${tripulante?.fecha_contratacion || ''}">
+                       value="${tripulante?.fecha_contratacion ? formatFechaForInput(tripulante.fecha_contratacion) : ''}" required>
+                <div class="invalid-feedback" id="fecha_contratacion_error">
+                    Por favor seleccione una fecha de contratación.
+                </div>
             </div>
         </form>
     `;
     
     showModal(title, form, () => submitTripulanteForm(tripulante));
+    
+    // Configurar validación en tiempo real después de mostrar el modal
+    setTimeout(() => {
+        setupRealTimeValidation('tripulanteForm');
+    }, 100);
 }
 
 async function submitTripulanteForm(tripulante) {
+    // Validar el formulario antes de proceder
+    if (!validateForm('tripulanteForm')) {
+        return;
+    }
+    
     const form = document.getElementById('tripulanteForm');
     const formData = new FormData(form);
+    const fechaInput = formData.get('fecha_contratacion');
+    
     const input = {
         codigo_tripulante: formData.get('codigo_tripulante'),
         nombre: formData.get('nombre'),
         codigo_base: formData.get('codigo_base'),
-        fecha_contratacion: formData.get('fecha_contratacion') || null
+        fecha_contratacion: fechaInput || null
     };
     
     try {
@@ -749,8 +1119,8 @@ async function loadVuelos() {
                 <td>${vuelo.numero_vuelo}</td>
                 <td>${vuelo.origen}</td>
                 <td>${vuelo.destino}</td>
-                <td>${vuelo.fecha_vuelo}</td>
-                <td>${vuelo.hora_salida}</td>
+                <td>${formatFechaVuelo(vuelo.fecha_vuelo)}</td>
+                <td>${formatHora(vuelo.hora_salida)}</td>
                 <td><span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">${vuelo.estado}</span></td>
                 <td class="table-actions">
                     <button class="btn btn-sm btn-info" onclick="viewVuelo('${vuelo.numero_vuelo}')">
@@ -788,63 +1158,99 @@ function showVueloForm(vuelo = null) {
     ).join('');
     
     const form = `
-        <form id="vueloForm">
+        <form id="vueloForm" novalidate>
             <div class="mb-3">
-                <label class="form-label">Número de Vuelo</label>
+                <label class="form-label">Número de Vuelo <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="numero_vuelo" 
                        value="${vuelo?.numero_vuelo || ''}" ${isEdit ? 'readonly' : ''} required>
+                <div class="invalid-feedback" id="numero_vuelo_error">
+                    Por favor ingrese el número de vuelo.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Origen</label>
+                <label class="form-label">Origen <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="origen" 
                        value="${vuelo?.origen || ''}" required>
+                <div class="invalid-feedback" id="origen_error">
+                    Por favor ingrese el origen del vuelo.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Destino</label>
+                <label class="form-label">Destino <span class="text-danger">*</span></label>
                 <input type="text" class="form-control" name="destino" 
                        value="${vuelo?.destino || ''}" required>
+                <div class="invalid-feedback" id="destino_error">
+                    Por favor ingrese el destino del vuelo.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Fecha del Vuelo</label>
+                <label class="form-label">Fecha del Vuelo <span class="text-danger">*</span></label>
                 <input type="date" class="form-control" name="fecha_vuelo" 
-                       value="${vuelo?.fecha_vuelo || ''}" required>
+                       value="${vuelo?.fecha_vuelo ? formatFechaForInput(vuelo.fecha_vuelo) : ''}" required>
+                <div class="invalid-feedback" id="fecha_vuelo_error">
+                    Por favor seleccione la fecha del vuelo.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Hora de Salida</label>
+                <label class="form-label">Hora de Salida <span class="text-danger">*</span></label>
                 <input type="time" class="form-control" name="hora_salida" 
                        value="${vuelo?.hora_salida || ''}" required>
+                <div class="invalid-feedback" id="hora_salida_error">
+                    Por favor seleccione la hora de salida.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Avión</label>
+                <label class="form-label">Avión <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_avion" required>
                     <option value="">Seleccionar avión</option>
                     ${avionesOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_avion_error">
+                    Por favor seleccione un avión.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Piloto</label>
+                <label class="form-label">Piloto <span class="text-danger">*</span></label>
                 <select class="form-control" name="codigo_piloto" required>
                     <option value="">Seleccionar piloto</option>
                     ${pilotosOptions}
                 </select>
+                <div class="invalid-feedback" id="codigo_piloto_error">
+                    Por favor seleccione un piloto.
+                </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Estado</label>
+                <label class="form-label">Estado <span class="text-danger">*</span></label>
                 <select class="form-control" name="estado" required>
+                    <option value="">Seleccionar estado</option>
                     <option value="programado" ${vuelo?.estado === 'programado' ? 'selected' : ''}>Programado</option>
                     <option value="realizado" ${vuelo?.estado === 'realizado' ? 'selected' : ''}>Realizado</option>
                     <option value="cancelado" ${vuelo?.estado === 'cancelado' ? 'selected' : ''}>Cancelado</option>
                 </select>
+                <div class="invalid-feedback" id="estado_error">
+                    Por favor seleccione un estado.
+                </div>
             </div>
         </form>
     `;
     
     showModal(title, form, () => submitVueloForm(vuelo));
+    
+    // Configurar validación en tiempo real después de mostrar el modal
+    setTimeout(() => {
+        setupRealTimeValidation('vueloForm');
+    }, 100);
 }
 
 async function submitVueloForm(vuelo) {
+    // Validar el formulario antes de proceder
+    if (!validateForm('vueloForm')) {
+        return;
+    }
+    
     const form = document.getElementById('vueloForm');
     const formData = new FormData(form);
+    
     const input = {
         numero_vuelo: formData.get('numero_vuelo'),
         origen: formData.get('origen'),
@@ -884,7 +1290,6 @@ async function submitVueloForm(vuelo) {
         alert('Error guardando vuelo: ' + error.message);
     }
 }
-
 async function editVuelo(numeroVuelo) {
     try {
         const query = `
@@ -1018,7 +1423,7 @@ async function viewVuelo(numeroVuelo) {
                         <div class="card-body">
                             <p><strong>Número:</strong> ${vuelo.numero_vuelo}</p>
                             <p><strong>Ruta:</strong> ${vuelo.origen} → ${vuelo.destino}</p>
-                            <p><strong>Fecha:</strong> ${vuelo.fecha_vuelo}</p>
+                            <p><strong>Fecha:</strong> ${formatFechaVuelo(vuelo.fecha_vuelo)}</p>
                             <p><strong>Hora:</strong> ${vuelo.hora_salida}</p>
                             <p><strong>Estado:</strong> <span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">${vuelo.estado}</span></p>
                         </div>

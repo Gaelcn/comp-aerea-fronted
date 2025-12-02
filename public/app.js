@@ -10,6 +10,358 @@ let appState = {
     tiposAvion: []
 };
 
+async function ensureVueloDataLoaded() {
+    // Si ya tenemos datos, no hacer nada
+    if (appState.aviones.length > 0 && appState.pilotos.length > 0) {
+        return true;
+    }
+    
+    try {
+        // Cargar datos necesarios
+        const query = `
+            query {
+                aviones {
+                    codigo_avion
+                    codigo_tipo
+                }
+                pilotos {
+                    codigo_piloto
+                    nombre
+                }
+            }
+        `;
+        
+        const data = await graphqlQuery(query);
+        appState.aviones = data.aviones || [];
+        appState.pilotos = data.pilotos || [];
+        
+        return appState.aviones.length > 0 && appState.pilotos.length > 0;
+    } catch (error) {
+        console.error('Error cargando datos para formulario de vuelo:', error);
+        return false;
+    }
+}
+
+// Variables globales para filtros de vuelos
+let todosLosVuelosDashboard = [];
+let filtroEstadoActual = 'todos';
+
+// Función para cargar vuelos en el dashboard
+function loadDashboardVuelos(vuelos) {
+    // Guardar todos los vuelos para filtrado
+    todosLosVuelosDashboard = vuelos || [];
+    
+    // Aplicar filtro actual
+    aplicarFiltroDashboard();
+}
+
+// Función para aplicar filtro a los vuelos del dashboard
+function aplicarFiltroDashboard() {
+    const table = document.getElementById('dashboardVuelosTable');
+    
+    console.log('Aplicando filtro:', filtroEstadoActual);
+    console.log('Vuelos disponibles:', vuelosDashboard);
+    
+    if (!vuelosDashboard || vuelosDashboard.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                    <div class="alert alert-info mb-0" role="alert">
+                        <i class="fas fa-plane-slash me-2"></i>
+                        No hay vuelos registrados
+                    </div>
+                </td>
+            </tr>
+        `;
+        actualizarContadorVuelos(0, 0);
+        return;
+    }
+    
+    // Filtrar vuelos según estado seleccionado
+    let vuelosFiltrados;
+    if (filtroEstadoActual === 'todos') {
+        vuelosFiltrados = vuelosDashboard;
+    } else {
+        vuelosFiltrados = vuelosDashboard.filter(vuelo => {
+            const estadoVuelo = (vuelo.estado || '').toLowerCase();
+            const estadoFiltro = filtroEstadoActual.toLowerCase();
+            return estadoVuelo === estadoFiltro;
+        });
+    }
+    
+    console.log('Vuelos filtrados:', vuelosFiltrados);
+    
+    // Ordenar vuelos por fecha (más recientes primero)
+    const vuelosOrdenados = [...vuelosFiltrados].sort((a, b) => {
+        try {
+            const fechaA = new Date(a.fecha_vuelo || 0);
+            const fechaB = new Date(b.fecha_vuelo || 0);
+            return fechaB - fechaA;
+        } catch (e) {
+            return 0;
+        }
+    });
+    
+    // Tomar solo los últimos 10 vuelos para el dashboard
+    const vuelosMostrar = vuelosOrdenados.slice(0, 10);
+    
+    console.log('Vuelos a mostrar:', vuelosMostrar);
+    
+    // Renderizar tabla
+    renderizarTablaVuelos(vuelosMostrar, vuelosFiltrados.length);
+    
+    // Actualizar contador
+    actualizarContadorVuelos(vuelosMostrar.length, vuelosFiltrados.length);
+    
+    // Mostrar/ocultar botón de quitar filtro
+    const resetBtn = document.getElementById('resetFiltroBtn');
+    if (resetBtn) {
+        resetBtn.style.display = filtroEstadoActual === 'todos' ? 'none' : 'inline-block';
+    }
+}
+
+// Función para renderizar la tabla de vuelos
+function renderizarTablaVuelos(vuelos, totalFiltrados) {
+    const table = document.getElementById('dashboardVuelosTable');
+    
+    console.log('Renderizando tabla con', vuelos.length, 'vuelos');
+    
+    if (vuelos.length === 0) {
+        let mensaje = 'No hay vuelos registrados';
+        if (filtroEstadoActual !== 'todos' && totalFiltrados === 0) {
+            const estadoTexto = getEstadoText(filtroEstadoActual).toLowerCase();
+            mensaje = `No hay vuelos ${estadoTexto}`;
+        }
+        
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                    <div class="alert alert-info mb-0" role="alert">
+                        <i class="fas fa-plane-slash me-2"></i>
+                        ${mensaje}
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    table.innerHTML = '';
+    
+    vuelos.forEach(vuelo => {
+        const row = document.createElement('tr');
+        
+        // Asegurarnos de que los valores no sean undefined
+        const numeroVuelo = vuelo.numero_vuelo || 'N/A';
+        const origen = vuelo.origen || 'N/A';
+        const destino = vuelo.destino || 'N/A';
+        const estado = vuelo.estado || 'desconocido';
+        
+        row.innerHTML = `
+            <td>
+                <strong>${numeroVuelo}</strong>
+            </td>
+            <td>${origen}</td>
+            <td>${destino}</td>
+            <td>
+                <span class="badge bg-light text-dark">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    ${formatFechaVuelo(vuelo.fecha_vuelo)}
+                </span>
+            </td>
+            <td>
+                <span class="badge bg-secondary">
+                    <i class="fas fa-clock me-1"></i>
+                    ${formatHora(vuelo.hora_salida)}
+                </span>
+            </td>
+            <td>
+                <span class="badge bg-${getEstadoBadgeColor(estado)}">
+                    ${getEstadoText(estado)}
+                </span>
+            </td>
+            <td class="table-actions">
+                <button class="btn btn-sm btn-outline-primary" 
+                        onclick="viewVuelo('${numeroVuelo}')" 
+                        title="Ver detalles del vuelo"
+                        data-bs-toggle="tooltip">
+                    <i class="fas fa-eye"></i>
+                    <span class="d-none d-md-inline"> Detalles</span>
+                </button>
+            </td>
+        `;
+        table.appendChild(row);
+    });
+    
+    // Inicializar tooltips
+    initTooltips();
+}
+
+// Función para actualizar el contador de vuelos
+function actualizarContadorVuelos(mostrando, total) {
+    const contador = document.getElementById('contadorVuelos');
+    if (contador) {
+        let texto = `Mostrando ${mostrando} de ${total} vuelos`;
+        
+        if (filtroEstadoActual !== 'todos') {
+            const estadoTexto = getEstadoText(filtroEstadoActual).toLowerCase();
+            texto += ` (filtrado por: ${estadoTexto})`;
+        }
+        
+        contador.textContent = texto;
+    }
+}
+
+// Función para filtrar vuelos por estado
+function filtrarVuelos(estado) {
+    console.log('Filtrando por estado:', estado);
+    
+    // Actualizar estado actual
+    filtroEstadoActual = estado;
+    
+    // Actualizar botones activos
+    const botonesFiltro = document.querySelectorAll('#filtroEstados .btn');
+    botonesFiltro.forEach(boton => {
+        const botonEstado = boton.getAttribute('data-estado');
+        if (botonEstado === estado) {
+            boton.classList.add('active');
+        } else {
+            boton.classList.remove('active');
+        }
+    });
+    
+    // Aplicar filtro
+    aplicarFiltroDashboard();
+}
+// Función para mostrar todos los vuelos (quitar filtro)
+function mostrarTodosVuelos() {
+    filtrarVuelos('todos');
+}
+
+// Función para obtener texto de estado
+function getEstadoText(estado) {
+    const estados = {
+        'programado': 'Programado',
+        'realizado': 'Realizado',
+        'cancelado': 'Cancelado',
+        'todos': 'Todos'
+    };
+    return estados[estado] || estado;
+}
+
+// Función para refrescar datos del dashboard periódicamente
+let dashboardRefreshInterval;
+
+function startDashboardRefresh() {
+    // Refrescar cada 30 segundos
+    dashboardRefreshInterval = setInterval(() => {
+        const currentSection = document.querySelector('.content-section[style="display: block;"]');
+        if (currentSection && currentSection.id === 'dashboard') {
+            loadDashboard();
+        }
+    }, 30000);
+}
+
+function stopDashboardRefresh() {
+    if (dashboardRefreshInterval) {
+        clearInterval(dashboardRefreshInterval);
+    }
+}
+
+function showSection(sectionName) {
+    // Ocultar todas las secciones
+    document.querySelectorAll('.content-section').forEach(section => {
+        section.style.display = 'none';
+    });
+    
+    // Mostrar la sección seleccionada
+    const section = document.getElementById(sectionName);
+    if (section) {
+        section.style.display = 'block';
+    }
+    
+    // Cargar datos según la sección
+    switch(sectionName) {
+        case 'dashboard':
+            loadDashboard();
+            break;
+        case 'aviones':
+            loadAviones();
+            break;
+        case 'pilotos':
+            loadPilotos();
+            break;
+        case 'tripulacion':
+            loadTripulacion();
+            break;
+        case 'vuelos':
+            // Solo cargar vuelos - loadVuelos() ya carga aviones y pilotos también
+            loadVuelos();
+            break;
+        case 'bases':
+            loadBases();
+            break;
+    }
+    
+    // Actualizar menú activo
+    updateActiveMenu(sectionName);
+}
+
+// Función para actualizar el menú activo
+function updateActiveMenu(activeSection) {
+    // Desktop menu
+    document.querySelectorAll('.sidebar .nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Mobile menu
+    document.querySelectorAll('.sidebar-mobile .nav-link').forEach(link => {
+        link.classList.remove('active');
+    });
+    
+    // Activar el correspondiente
+    const sectionMap = {
+        'dashboard': 'Dashboard',
+        'aviones': 'Aviones',
+        'pilotos': 'Pilotos',
+        'tripulacion': 'Tripulación',
+        'vuelos': 'Vuelos',
+        'bases': 'Bases'
+    };
+    
+    const sectionName = sectionMap[activeSection];
+    if (sectionName) {
+        // Desktop
+        const desktopLink = Array.from(document.querySelectorAll('.sidebar .nav-link')).find(link => 
+            link.textContent.includes(sectionName)
+        );
+        if (desktopLink) desktopLink.classList.add('active');
+        
+        // Mobile
+        const mobileLink = Array.from(document.querySelectorAll('.sidebar-mobile .nav-link')).find(link => 
+            link.textContent.includes(sectionName)
+        );
+        if (mobileLink) mobileLink.classList.add('active');
+    }
+}
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', function() {
+    // Mostrar dashboard por defecto
+    showSection('dashboard');
+    
+    // Cargar datos iniciales necesarios
+    loadBases();
+    
+    // Inicializar tooltips
+    initTooltips();
+});
+
+// Limpiar intervalos cuando se cierre la página
+window.addEventListener('beforeunload', function() {
+    stopDashboardRefresh();
+});
+
 // Función de validación reutilizable
 function validateForm(formId) {
     const form = document.getElementById(formId);
@@ -453,10 +805,31 @@ function showSection(sectionName) {
     }
 }
 
+// Variable global para almacenar vuelos del dashboard
+let vuelosDashboard = [];
+
 // Dashboard
 async function loadDashboard() {
     try {
-        const query = `
+        // Mostrar estado de carga en ambos botones
+        const refreshBtn = document.getElementById('refreshDashboardBtn');
+        const refreshVuelosBtn = document.getElementById('refreshVuelosBtn');
+        
+        const loadingHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        const normalHTML = '<i class="fas fa-sync-alt"></i>';
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = true;
+            refreshBtn.innerHTML = loadingHTML + ' <span class="d-none d-md-inline">Cargando...</span>';
+        }
+        
+        if (refreshVuelosBtn) {
+            refreshVuelosBtn.disabled = true;
+            refreshVuelosBtn.innerHTML = loadingHTML;
+        }
+        
+        // Query para los contadores
+        const countersQuery = `
             query {
                 aviones { codigo_avion }
                 pilotos { codigo_piloto }
@@ -465,15 +838,257 @@ async function loadDashboard() {
             }
         `;
         
-        const data = await graphqlQuery(query);
+        // Query para los vuelos recientes
+        const vuelosQuery = `
+            query {
+                vuelos {
+                    numero_vuelo
+                    origen
+                    destino
+                    fecha_vuelo
+                    hora_salida
+                    estado
+                }
+            }
+        `;
         
-        document.getElementById('totalAviones').textContent = data.aviones.length;
-        document.getElementById('totalPilotos').textContent = data.pilotos.length;
-        document.getElementById('totalTripulacion').textContent = data.tripulacion.length;
-        document.getElementById('totalVuelos').textContent = data.vuelos.length;
+        // Ejecutar ambas queries
+        const [countersData, vuelosData] = await Promise.all([
+            graphqlQuery(countersQuery),
+            graphqlQuery(vuelosQuery)
+        ]);
+        
+        // Actualizar contadores
+        document.getElementById('totalAviones').textContent = countersData.aviones.length;
+        document.getElementById('totalPilotos').textContent = countersData.pilotos.length;
+        document.getElementById('totalTripulacion').textContent = countersData.tripulacion.length;
+        document.getElementById('totalVuelos').textContent = countersData.vuelos.length;
+        
+        // Guardar vuelos en variable global para filtrado
+        vuelosDashboard = vuelosData.vuelos || [];
+        
+        // Actualizar tabla de vuelos en dashboard con filtro actual
+        aplicarFiltroDashboard();
+        
     } catch (error) {
-        alert('Error cargando dashboard: ' + error.message);
+        console.error('Error cargando dashboard:', error);
+        
+        // Mostrar error en la tabla
+        document.getElementById('dashboardVuelosTable').innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-danger">
+                    <div class="alert alert-danger py-2 my-0" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        Error cargando vuelos: ${error.message || 'Error desconocido'}
+                    </div>
+                </td>
+            </tr>
+        `;
+        
+    } finally {
+        // Restaurar botones
+        const refreshBtn = document.getElementById('refreshDashboardBtn');
+        const refreshVuelosBtn = document.getElementById('refreshVuelosBtn');
+        
+        if (refreshBtn) {
+            refreshBtn.disabled = false;
+            refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> <span class="d-none d-md-inline">Refrescar</span>';
+        }
+        
+        if (refreshVuelosBtn) {
+            refreshVuelosBtn.disabled = false;
+            refreshVuelosBtn.innerHTML = '<i class="fas fa-sync-alt"></i>';
+        }
     }
+}
+
+// Función para refrescar el dashboard manualmente
+function refreshDashboard() {
+    console.log('Refrescando dashboard...');
+    
+    // Solo recargar datos, no resetear filtro
+    loadDashboard();
+}
+
+// Función para refrescar solo los vuelos (botón pequeño)
+function refreshVuelos() {
+    console.log('Refrescando solo vuelos...');
+    
+    // Mantener el filtro actual pero recargar datos
+    const estadoActual = filtroEstadoActual;
+    loadDashboard().then(() => {
+        // Restaurar el filtro después de cargar
+        if (estadoActual !== 'todos') {
+            filtrarVuelos(estadoActual);
+        }
+    });
+}
+
+// Función para refrescar el dashboard manualmente
+function refreshDashboard() {
+    console.log('Refrescando dashboard...');
+    loadDashboard();
+}
+
+// Función para cargar vuelos en el dashboard
+function loadDashboardVuelos(vuelos) {
+    const table = document.getElementById('dashboardVuelosTable');
+    
+    if (!vuelos || vuelos.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted py-4">
+                    <div class="alert alert-info mb-0" role="alert">
+                        <i class="fas fa-plane-slash me-2"></i>
+                        No hay vuelos registrados
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Ordenar vuelos por fecha (más recientes primero)
+    const vuelosOrdenados = [...vuelos].sort((a, b) => {
+        const fechaA = new Date(a.fecha_vuelo || 0);
+        const fechaB = new Date(b.fecha_vuelo || 0);
+        return fechaB - fechaA;
+    });
+    
+    // Tomar solo los últimos 10 vuelos para el dashboard
+    const vuelosRecientes = vuelosOrdenados.slice(0, 10);
+    
+    table.innerHTML = '';
+    
+    vuelosRecientes.forEach(vuelo => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>
+                <strong>${vuelo.numero_vuelo}</strong>
+            </td>
+            <td>${vuelo.origen}</td>
+            <td>${vuelo.destino}</td>
+            <td>
+                <span class="badge bg-light text-dark">
+                    <i class="fas fa-calendar-alt me-1"></i>
+                    ${formatFechaVuelo(vuelo.fecha_vuelo)}
+                </span>
+            </td>
+            <td>
+                <span class="badge bg-secondary">
+                    <i class="fas fa-clock me-1"></i>
+                    ${formatHora(vuelo.hora_salida)}
+                </span>
+            </td>
+            <td>
+                <span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">
+                    ${getEstadoText(vuelo.estado)}
+                </span>
+            </td>
+            <td class="table-actions">
+                <button class="btn btn-sm btn-outline-primary" 
+                        onclick="viewVuelo('${vuelo.numero_vuelo}')" 
+                        title="Ver detalles del vuelo"
+                        data-bs-toggle="tooltip">
+                    <i class="fas fa-eye"></i>
+                    <span class="d-none d-md-inline"> Detalles</span>
+                </button>
+            </td>
+        `;
+        table.appendChild(row);
+    });
+    
+    // Inicializar tooltips
+    initTooltips();
+}
+
+// Función para inicializar tooltips
+function initTooltips() {
+    if (typeof bootstrap !== 'undefined') {
+        const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
+        tooltipTriggerList.forEach(tooltipTriggerEl => {
+            new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+}
+
+// Función para obtener texto de estado
+function getEstadoText(estado) {
+    const estados = {
+        'programado': 'Programado',
+        'realizado': 'Realizado',
+        'cancelado': 'Cancelado'
+    };
+    return estados[estado] || estado;
+}
+
+// Función para cargar vuelos en el dashboard
+function loadDashboardVuelos(vuelos) {
+    const table = document.getElementById('dashboardVuelosTable');
+    
+    if (!vuelos || vuelos.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="7" class="text-center text-muted">
+                    <i class="fas fa-plane-slash"></i> No hay vuelos registrados
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    // Ordenar vuelos por fecha (más recientes primero)
+    const vuelosOrdenados = [...vuelos].sort((a, b) => {
+        const fechaA = new Date(a.fecha_vuelo || 0);
+        const fechaB = new Date(b.fecha_vuelo || 0);
+        return fechaB - fechaA;
+    });
+    
+    // Tomar solo los últimos 10 vuelos para el dashboard
+    const vuelosRecientes = vuelosOrdenados.slice(0, 10);
+    
+    table.innerHTML = '';
+    
+    vuelosRecientes.forEach(vuelo => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${vuelo.numero_vuelo}</td>
+            <td>${vuelo.origen}</td>
+            <td>${vuelo.destino}</td>
+            <td>${formatFechaVuelo(vuelo.fecha_vuelo)}</td>
+            <td>${formatHora(vuelo.hora_salida)}</td>
+            <td>
+                <span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">
+                    ${getEstadoText(vuelo.estado)}
+                </span>
+            </td>
+            <td class="table-actions">
+                <button class="btn btn-sm btn-info" onclick="viewVuelo('${vuelo.numero_vuelo}')" 
+                        title="Ver detalles" data-bs-toggle="tooltip">
+                    <i class="fas fa-eye"></i> Ver
+                </button>
+            </td>
+        `;
+        table.appendChild(row);
+    });
+    
+    // Inicializar tooltips si es necesario
+    if (typeof bootstrap !== 'undefined') {
+        const tooltipTriggerList = [].slice.call(table.querySelectorAll('[data-bs-toggle="tooltip"]'));
+        tooltipTriggerList.map(function (tooltipTriggerEl) {
+            return new bootstrap.Tooltip(tooltipTriggerEl);
+        });
+    }
+}
+
+// Función para obtener texto de estado
+function getEstadoText(estado) {
+    const estados = {
+        'programado': 'Programado',
+        'realizado': 'Realizado',
+        'cancelado': 'Cancelado'
+    };
+    return estados[estado] || estado;
 }
 
 // Aviones
@@ -1088,21 +1703,6 @@ async function loadVuelos() {
                     estado
                     codigo_avion
                     codigo_piloto
-                    avion {
-                        codigo_avion
-                        codigo_tipo
-                    }
-                    piloto {
-                        nombre
-                    }
-                }
-                aviones {
-                    codigo_avion
-                    codigo_tipo
-                }
-                pilotos {
-                    codigo_piloto
-                    nombre
                 }
             }
         `;
@@ -1110,8 +1710,39 @@ async function loadVuelos() {
         const data = await graphqlQuery(query);
         appState.vuelos = data.vuelos;
         
+        // Ahora cargar aviones y pilotos por separado si no los tenemos
+        if (appState.aviones.length === 0) {
+            const avionesQuery = `query { aviones { codigo_avion codigo_tipo } }`;
+            const avionesData = await graphqlQuery(avionesQuery);
+            appState.aviones = avionesData.aviones || [];
+        }
+        
+        if (appState.pilotos.length === 0) {
+            const pilotosQuery = `query { pilotos { codigo_piloto nombre } }`;
+            const pilotosData = await graphqlQuery(pilotosQuery);
+            appState.pilotos = pilotosData.pilotos || [];
+        }
+        
+        console.log('Vuelos cargados:', data.vuelos.length);
+        console.log('Aviones disponibles:', appState.aviones.length);
+        console.log('Pilotos disponibles:', appState.pilotos.length);
+        
         const table = document.getElementById('vuelosTable');
         table.innerHTML = '';
+        
+        if (data.vuelos.length === 0) {
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-muted">
+                        <div class="alert alert-info mb-0" role="alert">
+                            <i class="fas fa-plane-slash me-2"></i>
+                            No hay vuelos registrados
+                        </div>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
         
         data.vuelos.forEach(vuelo => {
             const row = document.createElement('tr');
@@ -1137,6 +1768,7 @@ async function loadVuelos() {
             table.appendChild(row);
         });
     } catch (error) {
+        console.error('Error cargando vuelos:', error);
         alert('Error cargando vuelos: ' + error.message);
     }
 }
@@ -1145,22 +1777,73 @@ function showVueloForm(vuelo = null) {
     const isEdit = !!vuelo;
     const title = isEdit ? 'Editar Vuelo' : 'Nuevo Vuelo';
     
-    const avionesOptions = appState.aviones.map(avion => 
-        `<option value="${avion.codigo_avion}" ${vuelo?.codigo_avion === avion.codigo_avion ? 'selected' : ''}>
-            ${avion.codigo_avion} (${avion.codigo_tipo})
-        </option>`
-    ).join('');
+    console.log('Mostrando formulario de vuelo');
+    console.log('Aviones disponibles:', appState.aviones);
+    console.log('Pilotos disponibles:', appState.pilotos);
     
-    const pilotosOptions = appState.pilotos.map(piloto => 
-        `<option value="${piloto.codigo_piloto}" ${vuelo?.codigo_piloto === piloto.codigo_piloto ? 'selected' : ''}>
-            ${piloto.nombre}
-        </option>`
-    ).join('');
+    // Verificar que tenemos datos necesarios
+    if (!appState.aviones || appState.aviones.length === 0) {
+        const modalContent = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>No hay aviones disponibles</strong>
+                <p>No se encontraron aviones registrados en el sistema.</p>
+                <p>Por favor, registre aviones primero antes de crear vuelos.</p>
+                <button class="btn btn-sm btn-primary mt-2" onclick="showSection('aviones'); bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();">
+                    <i class="fas fa-plane me-1"></i> Ir a Aviones
+                </button>
+            </div>
+        `;
+        
+        showModal(title, modalContent, null);
+        return;
+    }
     
+    if (!appState.pilotos || appState.pilotos.length === 0) {
+        const modalContent = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                <strong>No hay pilotos disponibles</strong>
+                <p>No se encontraron pilotos registrados en el sistema.</p>
+                <p>Por favor, registre pilotos primero antes de crear vuelos.</p>
+                <button class="btn btn-sm btn-primary mt-2" onclick="showSection('pilotos'); bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();">
+                    <i class="fas fa-user-tie me-1"></i> Ir a Pilotos
+                </button>
+            </div>
+        `;
+        
+        showModal(title, modalContent, null);
+        return;
+    }
+    
+    // Crear opciones para aviones
+    const avionesOptions = appState.aviones.map(avion => {
+        // Asegurarse de que el objeto avion existe
+        const codigo = avion?.codigo_avion || 'N/A';
+        const tipo = avion?.codigo_tipo || '';
+        const selected = vuelo?.codigo_avion === codigo ? 'selected' : '';
+        
+        return `<option value="${codigo}" ${selected}>
+            ${codigo} ${tipo ? `(${tipo})` : ''}
+        </option>`;
+    }).join('');
+    
+    // Crear opciones para pilotos
+    const pilotosOptions = appState.pilotos.map(piloto => {
+        const codigo = piloto?.codigo_piloto || 'N/A';
+        const nombre = piloto?.nombre || 'Desconocido';
+        const selected = vuelo?.codigo_piloto === codigo ? 'selected' : '';
+        
+        return `<option value="${codigo}" ${selected}>
+            ${nombre} (${codigo})
+        </option>`;
+    }).join('');
+    
+    // Crear el formulario
     const form = `
         <form id="vueloForm" novalidate>
             <div class="mb-3">
-                <label class="form-label">Número de Vuelo <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Número de Vuelo</label>
                 <input type="text" class="form-control" name="numero_vuelo" 
                        value="${vuelo?.numero_vuelo || ''}" ${isEdit ? 'readonly' : ''} required>
                 <div class="invalid-feedback" id="numero_vuelo_error">
@@ -1168,7 +1851,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Origen <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Origen</label>
                 <input type="text" class="form-control" name="origen" 
                        value="${vuelo?.origen || ''}" required>
                 <div class="invalid-feedback" id="origen_error">
@@ -1176,7 +1859,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Destino <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Destino</label>
                 <input type="text" class="form-control" name="destino" 
                        value="${vuelo?.destino || ''}" required>
                 <div class="invalid-feedback" id="destino_error">
@@ -1184,7 +1867,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Fecha del Vuelo <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Fecha del Vuelo</label>
                 <input type="date" class="form-control" name="fecha_vuelo" 
                        value="${vuelo?.fecha_vuelo ? formatFechaForInput(vuelo.fecha_vuelo) : ''}" required>
                 <div class="invalid-feedback" id="fecha_vuelo_error">
@@ -1192,7 +1875,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Hora de Salida <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Hora de Salida</label>
                 <input type="time" class="form-control" name="hora_salida" 
                        value="${vuelo?.hora_salida || ''}" required>
                 <div class="invalid-feedback" id="hora_salida_error">
@@ -1200,7 +1883,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Avión <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Avión</label>
                 <select class="form-control" name="codigo_avion" required>
                     <option value="">Seleccionar avión</option>
                     ${avionesOptions}
@@ -1210,7 +1893,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Piloto <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Piloto</label>
                 <select class="form-control" name="codigo_piloto" required>
                     <option value="">Seleccionar piloto</option>
                     ${pilotosOptions}
@@ -1220,7 +1903,7 @@ function showVueloForm(vuelo = null) {
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label">Estado <span class="text-danger">*</span></label>
+                <label class="form-label required-label">Estado</label>
                 <select class="form-control" name="estado" required>
                     <option value="">Seleccionar estado</option>
                     <option value="programado" ${vuelo?.estado === 'programado' ? 'selected' : ''}>Programado</option>
@@ -1236,8 +1919,9 @@ function showVueloForm(vuelo = null) {
     
     showModal(title, form, () => submitVueloForm(vuelo));
     
-    // Configurar validación en tiempo real después de mostrar el modal
+    // Configurar validación en tiempo real después de que el modal se muestre
     setTimeout(() => {
+        console.log('Configurando validación para vueloForm');
         setupRealTimeValidation('vueloForm');
     }, 100);
 }
@@ -1290,8 +1974,12 @@ async function submitVueloForm(vuelo) {
         alert('Error guardando vuelo: ' + error.message);
     }
 }
+
 async function editVuelo(numeroVuelo) {
     try {
+        console.log('Editando vuelo:', numeroVuelo);
+        
+        // Primero cargar los datos del vuelo
         const query = `
             query GetVuelo($numeroVuelo: String!) {
                 vuelo(numero_vuelo: $numeroVuelo) {
@@ -1308,8 +1996,25 @@ async function editVuelo(numeroVuelo) {
         `;
         
         const data = await graphqlQuery(query, { numeroVuelo });
+        
+        if (!data.vuelo) {
+            alert('Vuelo no encontrado');
+            return;
+        }
+        
+        console.log('Datos del vuelo cargados:', data.vuelo);
+        
+        // Asegurarse de que tenemos aviones y pilotos cargados
+        if (appState.aviones.length === 0 || appState.pilotos.length === 0) {
+            // Si no tenemos datos, cargarlos primero
+            await loadVuelos(); // Esto también carga aviones y pilotos
+        }
+        
+        // Mostrar el formulario con los datos del vuelo
         showVueloForm(data.vuelo);
+        
     } catch (error) {
+        console.error('Error cargando vuelo:', error);
         alert('Error cargando vuelo: ' + error.message);
     }
 }
@@ -1549,7 +2254,15 @@ function showModal(title, body, onSave) {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
+    // Mostrar dashboard por defecto
     showSection('dashboard');
+    
     // Cargar datos iniciales necesarios
     loadBases();
+    
+    // Inicializar tooltips
+    initTooltips();
+    
+    // Inicializar filtro en "todos"
+    filtrarVuelos('todos');
 });

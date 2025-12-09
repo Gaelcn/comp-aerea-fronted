@@ -1,5 +1,23 @@
 const GRAPHQL_URL = 'https://comp-aerea-backend.onrender.com/graphql';
 
+// Usuarios estáticos
+const USUARIOS = {
+    'admin': {
+        password: 'admin123',
+        role: 'admin',
+        nombre: 'Administrador'
+    },
+    'usuario': {
+        password: 'usuario123',
+        role: 'user',
+        nombre: 'Usuario'
+    }
+};
+
+// Estado de sesión
+let currentUser = null;
+let isLoggedIn = false;
+
 // Estado global para almacenar datos
 let appState = {
     aviones: [],
@@ -9,6 +27,262 @@ let appState = {
     bases: [],
     tiposAvion: []
 };
+
+// Función para verificar credenciales
+function verificarCredenciales(username, password) {
+    const usuario = USUARIOS[username];
+    if (usuario && usuario.password === password) {
+        return usuario;
+    }
+    return null;
+}
+
+// Función para manejar el login
+function handleLogin(event) {
+    event.preventDefault();
+    
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const errorDiv = document.getElementById('loginError');
+    const errorMessage = document.getElementById('errorMessage');
+    
+    // Limpiar error anterior
+    errorDiv.classList.add('d-none');
+    
+    // Validar campos
+    if (!username || !password) {
+        errorMessage.textContent = 'Por favor complete todos los campos.';
+        errorDiv.classList.remove('d-none');
+        return;
+    }
+    
+    // Verificar credenciales
+    const usuario = verificarCredenciales(username, password);
+    
+    if (usuario) {
+        // Login exitoso
+        currentUser = usuario;
+        isLoggedIn = true;
+        
+        // Guardar en localStorage
+        localStorage.setItem('airline_user', JSON.stringify(usuario));
+        localStorage.setItem('airline_username', username);
+        
+        // Cerrar modal de login
+        const loginModal = bootstrap.Modal.getInstance(document.getElementById('loginModal'));
+        loginModal.hide();
+        
+        // Mostrar interfaz principal
+        mostrarInterfazPrincipal();
+        
+        // Mostrar mensaje de bienvenida
+        setTimeout(() => {
+            alert(`Bienvenido ${usuario.nombre} (${usuario.role === 'admin' ? 'Administrador' : 'Usuario'})`);
+        }, 500);
+        
+    } else {
+        // Credenciales incorrectas
+        errorMessage.textContent = 'Usuario o contraseña incorrectos.';
+        errorDiv.classList.remove('d-none');
+        
+        // Agregar efecto de shake al modal
+        const modalContent = document.querySelector('#loginModal .modal-content');
+        modalContent.classList.add('shake-animation');
+        setTimeout(() => {
+            modalContent.classList.remove('shake-animation');
+        }, 500);
+    }
+}
+
+// Función para mostrar la interfaz principal según el rol
+function mostrarInterfazPrincipal() {
+    // Determinar si estamos en móvil o desktop
+    const isMobile = window.innerWidth <= 768;
+    const mobileHeader = document.querySelector('.mobile-header');
+    const sidebar = document.querySelector('.sidebar');
+    const containerFluid = document.querySelector('.container-fluid');
+    const userInfo = document.getElementById('userInfo');
+    
+    // Ajustar visibilidad según el dispositivo
+    if (isMobile) {
+        // Modo móvil
+        if (mobileHeader) mobileHeader.style.display = 'flex';
+        if (sidebar) sidebar.style.display = 'none';
+        if (containerFluid) containerFluid.style.display = 'block';
+    } else {
+        // Modo desktop
+        if (mobileHeader) mobileHeader.style.display = 'none';
+        if (sidebar) sidebar.style.display = 'block';
+        if (containerFluid) containerFluid.style.display = 'block';
+    }
+    
+    // Mostrar información del usuario
+    if (userInfo) {
+        userInfo.style.display = 'block';
+        document.getElementById('currentUserName').textContent = currentUser.nombre;
+    }
+    
+    // Mostrar botón de logout
+    const logoutBtn = document.getElementById('logoutBtn');
+    if (logoutBtn) logoutBtn.style.display = 'inline-block';
+    
+    // Aplicar restricciones según el rol
+    if (currentUser.role === 'user') {
+        document.body.classList.add('user-restricted');
+        
+        // 1. Ocultar sección de vuelos del menú principal
+        const menuItems = document.querySelectorAll('.nav-link');
+        menuItems.forEach(item => {
+            if (item.textContent.includes('Vuelos')) {
+                item.parentElement.style.display = 'none';
+            }
+        });
+        
+        // 2. Quitar SOLO el botón "Ver todos los vuelos" (el azul con icono de enlace externo)
+        // Buscar en el grupo de botones del card-header del dashboard
+        const dashboardBtnGroups = document.querySelectorAll('#dashboard .card-header .btn-group');
+        if (dashboardBtnGroups.length > 1) {
+            // El segundo grupo contiene el botón que queremos ocultar
+            const actionBtnGroup = dashboardBtnGroups[1];
+            if (actionBtnGroup) {
+                const allVuelosBtn = actionBtnGroup.querySelector('.btn[title*="todos los vuelos"], .btn:has(i.fa-external-link-alt)');
+                if (allVuelosBtn) {
+                    allVuelosBtn.style.display = 'none';
+                }
+            }
+        }
+        
+        // 3. Si está en la sección de vuelos, redirigir al dashboard
+        const currentSection = document.querySelector('.content-section[style="display: block;"]');
+        if (currentSection && currentSection.id === 'vuelos') {
+            showSection('dashboard');
+        }
+        
+        // 4. Ocultar botones de acción (Agregar, Editar, Eliminar) en otras secciones
+        const actionButtons = document.querySelectorAll('.action-btn');
+        actionButtons.forEach(btn => {
+            btn.style.display = 'none';
+        });
+        
+        // 5. En la tabla de vuelos del dashboard, mantener solo el botón "Ver detalles"
+        const dashboardTableRows = document.querySelectorAll('#dashboardVuelosTable tr');
+        dashboardTableRows.forEach(row => {
+            const actionsCell = row.querySelector('.table-actions');
+            if (actionsCell) {
+                const buttons = actionsCell.querySelectorAll('.btn');
+                buttons.forEach(button => {
+                    // Mostrar solo botones de tipo "Ver detalles" (outline-primary)
+                    if (button.classList.contains('btn-outline-primary')) {
+                        button.style.display = 'inline-block';
+                    } else {
+                        button.style.display = 'none';
+                    }
+                });
+            }
+        });
+        
+    } else {
+        // Usuario admin - mostrar todo
+        document.body.classList.remove('user-restricted');
+        
+        // Mostrar todos los elementos del menú
+        const menuItems = document.querySelectorAll('.nav-item');
+        menuItems.forEach(item => {
+            item.style.display = 'block';
+        });
+        
+        // Mostrar botones de acción
+        const actionButtons = document.querySelectorAll('.action-btn');
+        actionButtons.forEach(btn => {
+            btn.style.display = 'inline-flex';
+        });
+        
+        // Mostrar todos los botones en el dashboard (incluyendo el de "Ver todos")
+        const dashboardButtons = document.querySelectorAll('#dashboard .card-header .btn-group .btn');
+        dashboardButtons.forEach(btn => {
+            btn.style.display = 'inline-block';
+        });
+    }
+    
+    // Mostrar dashboard por defecto
+    showSection('dashboard');
+    
+    // Cargar bases
+    loadBases();
+}
+// Función para cerrar sesión
+function logout() {
+    if (confirm('¿Está seguro que desea cerrar sesión?')) {
+        currentUser = null;
+        isLoggedIn = false;
+        
+        // Limpiar localStorage
+        localStorage.removeItem('airline_user');
+        localStorage.removeItem('airline_username');
+        
+        // Ocultar interfaz principal
+        document.querySelector('.mobile-header').style.display = 'none';
+        document.querySelector('.container-fluid').style.display = 'none';
+        document.getElementById('userInfo').style.display = 'none';
+        document.getElementById('logoutBtn').style.display = 'none';
+        
+        // Limpiar contenido de las secciones
+        document.querySelectorAll('.content-section').forEach(section => {
+            section.style.display = 'none';
+        });
+        
+        // Mostrar login
+        mostrarLogin();
+    }
+}
+
+// Función para mostrar el modal de login
+function mostrarLogin() {
+    // Resetear formulario
+    document.getElementById('loginForm').reset();
+    document.getElementById('loginError').classList.add('d-none');
+    
+    // Mostrar modal
+    const loginModal = new bootstrap.Modal(document.getElementById('loginModal'), {
+        backdrop: 'static',
+        keyboard: false
+    });
+    loginModal.show();
+}
+
+// Función para verificar autenticación al cargar la página
+function verificarAutenticacion() {
+    const savedUser = localStorage.getItem('airline_user');
+    const savedUsername = localStorage.getItem('airline_username');
+    
+    if (savedUser && savedUsername) {
+        try {
+            const usuario = JSON.parse(savedUser);
+            if (USUARIOS[savedUsername] && USUARIOS[savedUsername].password === usuario.password) {
+                currentUser = usuario;
+                isLoggedIn = true;
+                mostrarInterfazPrincipal();
+                return;
+            }
+        } catch (e) {
+            console.error('Error al cargar sesión:', e);
+        }
+    }
+    
+    // Si no hay sesión válida, mostrar login
+    mostrarLogin();
+}
+
+// Función para proteger acciones según el rol
+function protegerAccion(accion) {
+    if (currentUser && currentUser.role === 'user') {
+        if (accion === 'edit' || accion === 'delete' || accion === 'add') {
+            alert('No tiene permisos para realizar esta acción. Contacte al administrador.');
+            return false;
+        }
+    }
+    return true;
+}
 
 // Función para mostrar mensajes de error
 function showErrorMessage(title, message, details = null) {
@@ -125,6 +399,19 @@ function aplicarFiltroDashboard() {
     
     // Renderizar tabla
     renderizarTablaVuelos(vuelosMostrar, vuelosFiltrados.length);
+
+     if (currentUser && currentUser.role === 'user') {
+        const actionButtons = document.querySelectorAll('#dashboardVuelosTable .table-actions .btn');
+        actionButtons.forEach(button => {
+            // Mantener solo los botones "Ver detalles"
+            if (button.classList.contains('btn-outline-primary') || 
+                button.classList.contains('btn-info')) {
+                button.style.display = 'inline-block';
+            } else {
+                button.style.display = 'none';
+            }
+        });
+    }
     
     // Actualizar contador
     actualizarContadorVuelos(vuelosMostrar.length, vuelosFiltrados.length);
@@ -249,6 +536,7 @@ function filtrarVuelos(estado) {
     // Aplicar filtro
     aplicarFiltroDashboard();
 }
+
 // Función para mostrar todos los vuelos (quitar filtro)
 function mostrarTodosVuelos() {
     filtrarVuelos('todos');
@@ -285,6 +573,12 @@ function stopDashboardRefresh() {
 }
 
 function showSection(sectionName) {
+    // Verificar permisos para la sección de vuelos
+    if (sectionName === 'vuelos' && currentUser && currentUser.role === 'user') {
+        alert('No tiene acceso a la sección de vuelos.');
+        return;
+    }
+    
     // Ocultar todas las secciones
     document.querySelectorAll('.content-section').forEach(section => {
         section.style.display = 'none';
@@ -312,7 +606,13 @@ function showSection(sectionName) {
             break;
         case 'vuelos':
             // Solo cargar vuelos - loadVuelos() ya carga aviones y pilotos también
-            loadVuelos();
+            if (currentUser && currentUser.role === 'admin') {
+                loadVuelos();
+            } else {
+                // Si es usuario normal y trata de acceder a vuelos, redirigir al dashboard
+                alert('No tiene acceso a la sección de vuelos.');
+                showSection('dashboard');
+            }
             break;
         case 'bases':
             loadBases();
@@ -361,25 +661,7 @@ function updateActiveMenu(activeSection) {
     }
 }
 
-// Inicialización
-document.addEventListener('DOMContentLoaded', function() {
-    // Mostrar dashboard por defecto
-    showSection('dashboard');
-    
-    // Cargar datos iniciales necesarios
-    loadBases();
-    
-    // Inicializar tooltips
-    initTooltips();
-});
-
-// Limpiar intervalos cuando se cierre la página
-window.addEventListener('beforeunload', function() {
-    stopDashboardRefresh();
-});
-
 // Función de validación reutilizable
-// Función de validación reutilizable (agrega esto para checkboxes)
 function validateForm(formId) {
     const form = document.getElementById(formId);
     
@@ -834,7 +1116,9 @@ function showSection(sectionName) {
             loadTripulacion();
             break;
         case 'vuelos':
-            loadVuelos();
+            if (currentUser && currentUser.role === 'admin') {
+                loadVuelos();
+            }
             break;
         case 'bases':
             loadBases();
@@ -906,6 +1190,21 @@ async function loadDashboard() {
         
         // Actualizar tabla de vuelos en dashboard con filtro actual
         aplicarFiltroDashboard();
+
+        // Después de cargar los datos, aplicar restricciones de usuario
+        if (currentUser && currentUser.role === 'user') {
+            // Ocultar SOLO el botón "Ver todos los vuelos" (el azul)
+            const dashboardBtnGroups = document.querySelectorAll('#dashboard .card-header .btn-group');
+            if (dashboardBtnGroups.length > 1) {
+                const actionBtnGroup = dashboardBtnGroups[1];
+                if (actionBtnGroup) {
+                    const allVuelosBtn = actionBtnGroup.querySelector('.btn[title*="todos los vuelos"], .btn:has(i.fa-external-link-alt)');
+                    if (allVuelosBtn) {
+                        allVuelosBtn.style.display = 'none';
+                    }
+                }
+            }
+        }
         
     } catch (error) {
         console.error('Error cargando dashboard:', error);
@@ -959,12 +1258,6 @@ function refreshVuelos() {
             filtrarVuelos(estadoActual);
         }
     });
-}
-
-// Función para refrescar el dashboard manualmente
-function refreshDashboard() {
-    console.log('Refrescando dashboard...');
-    loadDashboard();
 }
 
 // Función para cargar vuelos en el dashboard
@@ -1041,91 +1334,12 @@ function loadDashboardVuelos(vuelos) {
 
 // Función para inicializar tooltips
 function initTooltips() {
-    if (typeof bootstrap !== 'undefined') {
+    if (typeof bootstrap !== 'undefined' && isLoggedIn) {
         const tooltipTriggerList = document.querySelectorAll('[data-bs-toggle="tooltip"]');
         tooltipTriggerList.forEach(tooltipTriggerEl => {
             new bootstrap.Tooltip(tooltipTriggerEl);
         });
     }
-}
-
-// Función para obtener texto de estado
-function getEstadoText(estado) {
-    const estados = {
-        'programado': 'Programado',
-        'realizado': 'Realizado',
-        'cancelado': 'Cancelado'
-    };
-    return estados[estado] || estado;
-}
-
-// Función para cargar vuelos en el dashboard
-function loadDashboardVuelos(vuelos) {
-    const table = document.getElementById('dashboardVuelosTable');
-    
-    if (!vuelos || vuelos.length === 0) {
-        table.innerHTML = `
-            <tr>
-                <td colspan="7" class="text-center text-muted">
-                    <i class="fas fa-plane-slash"></i> No hay vuelos registrados
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    // Ordenar vuelos por fecha (más recientes primero)
-    const vuelosOrdenados = [...vuelos].sort((a, b) => {
-        const fechaA = new Date(a.fecha_vuelo || 0);
-        const fechaB = new Date(b.fecha_vuelo || 0);
-        return fechaB - fechaA;
-    });
-    
-    // Tomar solo los últimos 10 vuelos para el dashboard
-    const vuelosRecientes = vuelosOrdenados.slice(0, 10);
-    
-    table.innerHTML = '';
-    
-    vuelosRecientes.forEach(vuelo => {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>${vuelo.numero_vuelo}</td>
-            <td>${vuelo.origen}</td>
-            <td>${vuelo.destino}</td>
-            <td>${formatFechaVuelo(vuelo.fecha_vuelo)}</td>
-            <td>${formatHora(vuelo.hora_salida)}</td>
-            <td>
-                <span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">
-                    ${getEstadoText(vuelo.estado)}
-                </span>
-            </td>
-            <td class="table-actions">
-                <button class="btn btn-sm btn-info" onclick="viewVuelo('${vuelo.numero_vuelo}')" 
-                        title="Ver detalles" data-bs-toggle="tooltip">
-                    <i class="fas fa-eye"></i> Ver
-                </button>
-            </td>
-        `;
-        table.appendChild(row);
-    });
-    
-    // Inicializar tooltips si es necesario
-    if (typeof bootstrap !== 'undefined') {
-        const tooltipTriggerList = [].slice.call(table.querySelectorAll('[data-bs-toggle="tooltip"]'));
-        tooltipTriggerList.map(function (tooltipTriggerEl) {
-            return new bootstrap.Tooltip(tooltipTriggerEl);
-        });
-    }
-}
-
-// Función para obtener texto de estado
-function getEstadoText(estado) {
-    const estados = {
-        'programado': 'Programado',
-        'realizado': 'Realizado',
-        'cancelado': 'Cancelado'
-    };
-    return estados[estado] || estado;
 }
 
 // Aviones
@@ -1168,12 +1382,18 @@ async function loadAviones() {
                 <td>${avion.base?.nombre_base || avion.codigo_base}</td>
                 <td>${formatFecha(avion.fecha_adquisicion)}</td>
                 <td class="table-actions">
+                    ${currentUser.role === 'admin' ? `
                     <button class="btn btn-sm btn-warning" onclick="editAvion('${avion.codigo_avion}')">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteAvion('${avion.codigo_avion}')">
                         <i class="fas fa-trash"></i>
                     </button>
+                    ` : `
+                    <button class="btn btn-sm btn-info" onclick="viewAvion('${avion.codigo_avion}')">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                    `}
                 </td>
             `;
             table.appendChild(row);
@@ -1184,6 +1404,9 @@ async function loadAviones() {
 }
 
 function showAvionForm(avion = null) {
+    // Verificar permisos
+    if (!protegerAccion(avion ? 'edit' : 'add')) return;
+    
     const isEdit = !!avion;
     const title = isEdit ? 'Editar Avión' : 'Nuevo Avión';
     
@@ -1308,6 +1531,8 @@ async function submitAvionForm(avion) {
 }
 
 async function editAvion(codigoAvion) {
+    if (!protegerAccion('edit')) return;
+    
     try {
         const query = `
             query GetAvion($codigoAvion: String!) {
@@ -1327,7 +1552,48 @@ async function editAvion(codigoAvion) {
     }
 }
 
+// Función para ver detalles del avión (para usuarios normales)
+async function viewAvion(codigoAvion) {
+    try {
+        const query = `
+            query GetAvion($codigoAvion: String!) {
+                avion(codigo_avion: $codigoAvion) {
+                    codigo_avion
+                    codigo_tipo
+                    codigo_base
+                    fecha_adquisicion
+                    tipo { nombre_tipo }
+                    base { nombre_base ubicacion }
+                }
+            }
+        `;
+        
+        const data = await graphqlQuery(query, { codigoAvion });
+        const avion = data.avion;
+        
+        const modalContent = `
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Detalles del Avión</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Código:</strong> ${avion.codigo_avion}</p>
+                    <p><strong>Tipo:</strong> ${avion.tipo?.nombre_tipo || avion.codigo_tipo}</p>
+                    <p><strong>Base:</strong> ${avion.base?.nombre_base || avion.codigo_base} ${avion.base?.ubicacion ? `(${avion.base.ubicacion})` : ''}</p>
+                    <p><strong>Fecha de Adquisición:</strong> ${formatFecha(avion.fecha_adquisicion)}</p>
+                </div>
+            </div>
+        `;
+        
+        showModal('Detalles del Avión', modalContent, null);
+    } catch (error) {
+        alert('Error cargando detalles del avión: ' + error.message);
+    }
+}
+
 async function deleteAvion(codigoAvion) {
+    if (!protegerAccion('delete')) return;
+    
     try {
         // Primero verificar si el avión tiene vuelos asignados
         const checkQuery = `
@@ -1459,12 +1725,18 @@ async function loadPilotos() {
                 <td>${piloto.horas_vuelo}</td>
                 <td>${piloto.base?.nombre_base || piloto.codigo_base}</td>
                 <td class="table-actions">
+                    ${currentUser.role === 'admin' ? `
                     <button class="btn btn-sm btn-warning" onclick="editPiloto('${piloto.codigo_piloto}')">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deletePiloto('${piloto.codigo_piloto}')">
                         <i class="fas fa-trash"></i>
                     </button>
+                    ` : `
+                    <button class="btn btn-sm btn-info" onclick="viewPiloto('${piloto.codigo_piloto}')">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                    `}
                 </td>
             `;
             table.appendChild(row);
@@ -1475,6 +1747,9 @@ async function loadPilotos() {
 }
 
 function showPilotoForm(piloto = null) {
+    // Verificar permisos
+    if (!protegerAccion(piloto ? 'edit' : 'add')) return;
+    
     const isEdit = !!piloto;
     const title = isEdit ? 'Editar Piloto' : 'Nuevo Piloto';
     
@@ -1587,6 +1862,8 @@ async function submitPilotoForm(piloto) {
 }
 
 async function editPiloto(codigoPiloto) {
+    if (!protegerAccion('edit')) return;
+    
     try {
         const query = `
             query GetPiloto($codigoPiloto: String!) {
@@ -1607,7 +1884,49 @@ async function editPiloto(codigoPiloto) {
     }
 }
 
+// Función para ver detalles del piloto (para usuarios normales)
+async function viewPiloto(codigoPiloto) {
+    try {
+        const query = `
+            query GetPiloto($codigoPiloto: String!) {
+                piloto(codigo_piloto: $codigoPiloto) {
+                    codigo_piloto
+                    nombre
+                    horas_vuelo
+                    codigo_base
+                    fecha_contratacion
+                    base { nombre_base ubicacion }
+                }
+            }
+        `;
+        
+        const data = await graphqlQuery(query, { codigoPiloto });
+        const piloto = data.piloto;
+        
+        const modalContent = `
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Detalles del Piloto</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Código:</strong> ${piloto.codigo_piloto}</p>
+                    <p><strong>Nombre:</strong> ${piloto.nombre}</p>
+                    <p><strong>Horas de Vuelo:</strong> ${piloto.horas_vuelo}</p>
+                    <p><strong>Base:</strong> ${piloto.base?.nombre_base || piloto.codigo_base} ${piloto.base?.ubicacion ? `(${piloto.base.ubicacion})` : ''}</p>
+                    <p><strong>Fecha de Contratación:</strong> ${formatFecha(piloto.fecha_contratacion)}</p>
+                </div>
+            </div>
+        `;
+        
+        showModal('Detalles del Piloto', modalContent, null);
+    } catch (error) {
+        alert('Error cargando detalles del piloto: ' + error.message);
+    }
+}
+
 async function deletePiloto(codigoPiloto) {
+    if (!protegerAccion('delete')) return;
+    
     try {
         // Primero verificar si el piloto tiene vuelos asignados
         const checkQuery = `
@@ -1733,12 +2052,18 @@ async function loadTripulacion() {
                 <td>${tripulante.nombre}</td>
                 <td>${tripulante.base?.nombre_base || tripulante.codigo_base}</td>
                 <td class="table-actions">
+                    ${currentUser.role === 'admin' ? `
                     <button class="btn btn-sm btn-warning" onclick="editTripulante('${tripulante.codigo_tripulante}')">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button class="btn btn-sm btn-danger" onclick="deleteTripulante('${tripulante.codigo_tripulante}')">
                         <i class="fas fa-trash"></i>
                     </button>
+                    ` : `
+                    <button class="btn btn-sm btn-info" onclick="viewTripulante('${tripulante.codigo_tripulante}')">
+                        <i class="fas fa-eye"></i> Ver
+                    </button>
+                    `}
                 </td>
             `;
             table.appendChild(row);
@@ -1749,6 +2074,9 @@ async function loadTripulacion() {
 }
 
 function showTripulanteForm(tripulante = null) {
+    // Verificar permisos
+    if (!protegerAccion(tripulante ? 'edit' : 'add')) return;
+    
     const isEdit = !!tripulante;
     const title = isEdit ? 'Editar Tripulante' : 'Nuevo Tripulante';
     
@@ -1852,6 +2180,8 @@ async function submitTripulanteForm(tripulante) {
 }
 
 async function editTripulante(codigoTripulante) {
+    if (!protegerAccion('edit')) return;
+    
     try {
         const query = `
             query GetTripulante($codigoTripulante: String!) {
@@ -1871,7 +2201,47 @@ async function editTripulante(codigoTripulante) {
     }
 }
 
+// Función para ver detalles del tripulante (para usuarios normales)
+async function viewTripulante(codigoTripulante) {
+    try {
+        const query = `
+            query GetTripulante($codigoTripulante: String!) {
+                tripulante(codigo_tripulante: $codigoTripulante) {
+                    codigo_tripulante
+                    nombre
+                    codigo_base
+                    fecha_contratacion
+                    base { nombre_base ubicacion }
+                }
+            }
+        `;
+        
+        const data = await graphqlQuery(query, { codigoTripulante });
+        const tripulante = data.tripulante;
+        
+        const modalContent = `
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">Detalles del Tripulante</h5>
+                </div>
+                <div class="card-body">
+                    <p><strong>Código:</strong> ${tripulante.codigo_tripulante}</p>
+                    <p><strong>Nombre:</strong> ${tripulante.nombre}</p>
+                    <p><strong>Base:</strong> ${tripulante.base?.nombre_base || tripulante.codigo_base} ${tripulante.base?.ubicacion ? `(${tripulante.base.ubicacion})` : ''}</p>
+                    <p><strong>Fecha de Contratación:</strong> ${formatFecha(tripulante.fecha_contratacion)}</p>
+                </div>
+            </div>
+        `;
+        
+        showModal('Detalles del Tripulante', modalContent, null);
+    } catch (error) {
+        alert('Error cargando detalles del tripulante: ' + error.message);
+    }
+}
+
 async function deleteTripulante(codigoTripulante) {
+    if (!protegerAccion('delete')) return;
+    
     try {
         // Primero verificar si el tripulante tiene vuelos asignados
         const checkQuery = `
@@ -2113,6 +2483,7 @@ async function loadVuelos() {
                         <i class="fas fa-eye"></i>
                         <span class="d-none d-md-inline"> Ver</span>
                     </button>
+                    ${currentUser.role === 'admin' ? `
                     <button class="btn btn-sm btn-warning" onclick="editVuelo('${vuelo.numero_vuelo}')" 
                             title="Editar vuelo" data-bs-toggle="tooltip">
                         <i class="fas fa-edit"></i>
@@ -2123,6 +2494,7 @@ async function loadVuelos() {
                         <i class="fas fa-trash"></i>
                         <span class="d-none d-md-inline"> Eliminar</span>
                     </button>
+                    ` : ''}
                 </td>
             `;
             table.appendChild(row);
@@ -2160,6 +2532,9 @@ async function loadVuelos() {
 }
 
 function showVueloForm(vuelo = null) {
+    // Verificar permisos
+    if (!protegerAccion(vuelo ? 'edit' : 'add')) return;
+    
     const isEdit = !!vuelo;
     const title = isEdit ? 'Editar Vuelo' : 'Nuevo Vuelo';
     
@@ -2662,6 +3037,8 @@ async function submitVueloForm(vuelo) {
 }
 
 async function editVuelo(numeroVuelo) {
+    if (!protegerAccion('edit')) return;
+    
     try {
         console.log('Editando vuelo:', numeroVuelo);
         
@@ -2864,6 +3241,8 @@ async function viewVuelo(numeroVuelo) {
 }
 
 async function deleteVuelo(numeroVuelo) {
+    if (!protegerAccion('delete')) return;
+    
     if (confirm('¿Está seguro de eliminar este vuelo?')) {
         try {
             const mutation = `
@@ -2949,15 +3328,41 @@ function showModal(title, body, onSave) {
 
 // Inicialización
 document.addEventListener('DOMContentLoaded', function() {
-    // Mostrar dashboard por defecto
-    showSection('dashboard');
+    // Verificar autenticación
+    verificarAutenticacion();
     
-    // Cargar datos iniciales necesarios
-    loadBases();
-    
-    // Inicializar tooltips
-    initTooltips();
+    // Configurar evento del formulario de login
+    document.getElementById('loginForm').addEventListener('submit', handleLogin);
     
     // Inicializar filtro en "todos"
     filtrarVuelos('todos');
+});
+
+// Limpiar intervalos cuando se cierre la página
+window.addEventListener('beforeunload', function() {
+    stopDashboardRefresh();
+});
+
+// Al final del archivo app.js, después de window.addEventListener('beforeunload', ...)
+window.addEventListener('resize', function() {
+    if (isLoggedIn) {
+        // Reajustar visibilidad de header según tamaño
+        const mobileHeader = document.querySelector('.mobile-header');
+        const sidebar = document.querySelector('.sidebar');
+        const isMobile = window.innerWidth <= 768;
+        
+        if (isMobile) {
+            if (mobileHeader) mobileHeader.style.display = 'flex';
+            if (sidebar) sidebar.style.display = 'none';
+        } else {
+            if (mobileHeader) mobileHeader.style.display = 'none';
+            if (sidebar) sidebar.style.display = 'block';
+        }
+    }
+    
+    // Cerrar menú móvil si está abierto
+    const mobileSidebar = document.getElementById('mobileSidebar');
+    if (window.innerWidth > 768 && mobileSidebar.classList.contains('open')) {
+        toggleMobileMenu();
+    }
 });

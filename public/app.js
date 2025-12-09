@@ -363,6 +363,7 @@ window.addEventListener('beforeunload', function() {
 });
 
 // Función de validación reutilizable
+// Función de validación reutilizable (agrega esto para checkboxes)
 function validateForm(formId) {
     const form = document.getElementById(formId);
     
@@ -375,10 +376,30 @@ function validateForm(formId) {
     form.classList.remove('was-validated');
     form.querySelectorAll('.is-invalid').forEach(el => el.classList.remove('is-invalid'));
     
-    // Validar todos los campos
-    const isValid = form.checkValidity();
+    // Validar todos los campos estándar
+    const isValidStandard = form.checkValidity();
     
-    if (!isValid) {
+    // Validación especial para checkboxes de tripulación
+    let isValidTripulacion = true;
+    const checkboxesTripulacion = form.querySelectorAll('.tripulacion-checkbox');
+    if (checkboxesTripulacion.length > 0) {
+        const seleccionados = form.querySelectorAll('.tripulacion-checkbox:checked').length;
+        const errorElement = document.getElementById('codigos_tripulacion_error');
+        
+        if (seleccionados === 0) {
+            isValidTripulacion = false;
+            if (errorElement) {
+                errorElement.style.display = 'block';
+                errorElement.textContent = 'Por favor seleccione al menos un tripulante.';
+            }
+        } else {
+            if (errorElement) {
+                errorElement.style.display = 'none';
+            }
+        }
+    }
+    
+    if (!isValidStandard || !isValidTripulacion) {
         form.classList.add('was-validated');
         
         // Mostrar mensajes de error específicos
@@ -1692,6 +1713,8 @@ async function deleteTripulante(codigoTripulante) {
 // Vuelos
 async function loadVuelos() {
     try {
+        console.log('Cargando vuelos...');
+        
         const query = `
             query {
                 vuelos {
@@ -1703,34 +1726,72 @@ async function loadVuelos() {
                     estado
                     codigo_avion
                     codigo_piloto
+                    tripulacion {
+                        codigo_tripulante
+                        nombre
+                    }
                 }
             }
         `;
         
         const data = await graphqlQuery(query);
-        appState.vuelos = data.vuelos;
+        console.log('Vuelos recibidos del backend:', data.vuelos);
         
-        // Ahora cargar aviones y pilotos por separado si no los tenemos
-        if (appState.aviones.length === 0) {
-            const avionesQuery = `query { aviones { codigo_avion codigo_tipo } }`;
-            const avionesData = await graphqlQuery(avionesQuery);
-            appState.aviones = avionesData.aviones || [];
+        appState.vuelos = data.vuelos || [];
+        
+        // Ahora cargar aviones, pilotos y tripulación por separado si no los tenemos
+        if (!appState.aviones || appState.aviones.length === 0) {
+            console.log('Cargando aviones...');
+            try {
+                const avionesQuery = `query { aviones { codigo_avion codigo_tipo } }`;
+                const avionesData = await graphqlQuery(avionesQuery);
+                appState.aviones = avionesData.aviones || [];
+                console.log('Aviones cargados:', appState.aviones);
+            } catch (error) {
+                console.error('Error cargando aviones:', error);
+                appState.aviones = [];
+            }
         }
         
-        if (appState.pilotos.length === 0) {
-            const pilotosQuery = `query { pilotos { codigo_piloto nombre } }`;
-            const pilotosData = await graphqlQuery(pilotosQuery);
-            appState.pilotos = pilotosData.pilotos || [];
+        if (!appState.pilotos || appState.pilotos.length === 0) {
+            console.log('Cargando pilotos...');
+            try {
+                const pilotosQuery = `query { pilotos { codigo_piloto nombre } }`;
+                const pilotosData = await graphqlQuery(pilotosQuery);
+                appState.pilotos = pilotosData.pilotos || [];
+                console.log('Pilotos cargados:', appState.pilotos);
+            } catch (error) {
+                console.error('Error cargando pilotos:', error);
+                appState.pilotos = [];
+            }
         }
         
-        console.log('Vuelos cargados:', data.vuelos.length);
+        if (!appState.tripulacion || appState.tripulacion.length === 0) {
+            console.log('Cargando tripulación...');
+            try {
+                await loadTripulacion();
+            } catch (error) {
+                console.error('Error cargando tripulación:', error);
+                appState.tripulacion = [];
+            }
+        }
+        
+        console.log('Vuelos cargados:', appState.vuelos.length);
         console.log('Aviones disponibles:', appState.aviones.length);
         console.log('Pilotos disponibles:', appState.pilotos.length);
+        console.log('Tripulación disponible:', appState.tripulacion.length);
         
         const table = document.getElementById('vuelosTable');
+        
+        if (!table) {
+            console.error('¡Tabla de vuelos no encontrada!');
+            return;
+        }
+        
+        // Limpiar la tabla
         table.innerHTML = '';
         
-        if (data.vuelos.length === 0) {
+        if (!appState.vuelos || appState.vuelos.length === 0) {
             table.innerHTML = `
                 <tr>
                     <td colspan="7" class="text-center text-muted">
@@ -1744,31 +1805,70 @@ async function loadVuelos() {
             return;
         }
         
-        data.vuelos.forEach(vuelo => {
+        // Mostrar todos los vuelos en la tabla
+        appState.vuelos.forEach(vuelo => {
+            console.log('Procesando vuelo:', vuelo);
+            
             const row = document.createElement('tr');
             row.innerHTML = `
-                <td>${vuelo.numero_vuelo}</td>
-                <td>${vuelo.origen}</td>
-                <td>${vuelo.destino}</td>
+                <td><strong>${vuelo.numero_vuelo || 'N/A'}</strong></td>
+                <td>${vuelo.origen || 'N/A'}</td>
+                <td>${vuelo.destino || 'N/A'}</td>
                 <td>${formatFechaVuelo(vuelo.fecha_vuelo)}</td>
                 <td>${formatHora(vuelo.hora_salida)}</td>
-                <td><span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">${vuelo.estado}</span></td>
+                <td>
+                    <span class="badge bg-${getEstadoBadgeColor(vuelo.estado)}">
+                        ${vuelo.estado || 'desconocido'}
+                    </span>
+                </td>
                 <td class="table-actions">
-                    <button class="btn btn-sm btn-info" onclick="viewVuelo('${vuelo.numero_vuelo}')">
+                    <button class="btn btn-sm btn-info" onclick="viewVuelo('${vuelo.numero_vuelo}')" 
+                            title="Ver detalles" data-bs-toggle="tooltip">
                         <i class="fas fa-eye"></i>
+                        <span class="d-none d-md-inline"> Ver</span>
                     </button>
-                    <button class="btn btn-sm btn-warning" onclick="editVuelo('${vuelo.numero_vuelo}')">
+                    <button class="btn btn-sm btn-warning" onclick="editVuelo('${vuelo.numero_vuelo}')" 
+                            title="Editar vuelo" data-bs-toggle="tooltip">
                         <i class="fas fa-edit"></i>
+                        <span class="d-none d-md-inline"> Editar</span>
                     </button>
-                    <button class="btn btn-sm btn-danger" onclick="deleteVuelo('${vuelo.numero_vuelo}')">
+                    <button class="btn btn-sm btn-danger" onclick="deleteVuelo('${vuelo.numero_vuelo}')" 
+                            title="Eliminar vuelo" data-bs-toggle="tooltip">
                         <i class="fas fa-trash"></i>
+                        <span class="d-none d-md-inline"> Eliminar</span>
                     </button>
                 </td>
             `;
             table.appendChild(row);
         });
+        
+        // Inicializar tooltips si Bootstrap está disponible
+        if (typeof bootstrap !== 'undefined') {
+            const tooltipTriggerList = [].slice.call(table.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        }
+        
+        console.log('Tabla de vuelos actualizada con', appState.vuelos.length, 'registros');
+        
     } catch (error) {
         console.error('Error cargando vuelos:', error);
+        
+        const table = document.getElementById('vuelosTable');
+        if (table) {
+            table.innerHTML = `
+                <tr>
+                    <td colspan="7" class="text-center text-danger">
+                        <div class="alert alert-danger py-2 my-0" role="alert">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            Error cargando vuelos: ${error.message || 'Error desconocido'}
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+        
         alert('Error cargando vuelos: ' + error.message);
     }
 }
@@ -1780,6 +1880,7 @@ function showVueloForm(vuelo = null) {
     console.log('Mostrando formulario de vuelo');
     console.log('Aviones disponibles:', appState.aviones);
     console.log('Pilotos disponibles:', appState.pilotos);
+    console.log('Tripulación disponible:', appState.tripulacion);
     
     // Verificar que tenemos datos necesarios
     if (!appState.aviones || appState.aviones.length === 0) {
@@ -1816,9 +1917,23 @@ function showVueloForm(vuelo = null) {
         return;
     }
     
+    // Cargar tripulación si no está cargada
+    if (!appState.tripulacion || appState.tripulacion.length === 0) {
+        loadTripulacion().then(() => {
+            // Volver a mostrar el formulario después de cargar tripulación
+            showVueloForm(vuelo);
+        });
+        return;
+    }
+    
+    // Obtener tripulación asignada actualmente (para edición)
+    let tripulacionAsignada = [];
+    if (isEdit && vuelo && vuelo.tripulacion) {
+        tripulacionAsignada = vuelo.tripulacion.map(t => t.codigo_tripulante);
+    }
+    
     // Crear opciones para aviones
     const avionesOptions = appState.aviones.map(avion => {
-        // Asegurarse de que el objeto avion existe
         const codigo = avion?.codigo_avion || 'N/A';
         const tipo = avion?.codigo_tipo || '';
         const selected = vuelo?.codigo_avion === codigo ? 'selected' : '';
@@ -1839,6 +1954,56 @@ function showVueloForm(vuelo = null) {
         </option>`;
     }).join('');
     
+    // Crear checkboxes para tripulación
+    let tripulacionCheckboxes = '';
+    if (appState.tripulacion && appState.tripulacion.length > 0) {
+        tripulacionCheckboxes = `
+            <div class="tripulacion-checkbox-container" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-top: 5px;">
+                <div class="row g-2">
+        `;
+        
+        appState.tripulacion.forEach((tripulante, index) => {
+            const codigo = tripulante?.codigo_tripulante || 'N/A';
+            const nombre = tripulante?.nombre || 'Desconocido';
+            const base = tripulante?.base?.nombre_base || tripulante?.codigo_base || '';
+            const checked = tripulacionAsignada.includes(codigo) ? 'checked' : '';
+            
+            tripulacionCheckboxes += `
+                <div class="col-md-6 col-lg-4">
+                    <div class="form-check">
+                        <input class="form-check-input tripulacion-checkbox" 
+                               type="checkbox" 
+                               value="${codigo}" 
+                               id="tripulante_${index}" 
+                               name="codigos_tripulacion" 
+                               ${checked}>
+                        <label class="form-check-label" for="tripulante_${index}">
+                            <small>
+                                <strong>${nombre}</strong><br>
+                                <span class="text-muted">${codigo} - ${base}</span>
+                            </small>
+                        </label>
+                    </div>
+                </div>
+            `;
+        });
+        
+        tripulacionCheckboxes += `
+                </div>
+            </div>
+        `;
+    } else {
+        tripulacionCheckboxes = `
+            <div class="alert alert-warning">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                No hay tripulación disponible. Registre tripulación primero.
+            </div>
+        `;
+    }
+    
+    // Contador de tripulantes seleccionados
+    const contadorSeleccionados = tripulacionAsignada.length;
+    
     // Crear el formulario
     const form = `
         <form id="vueloForm" novalidate>
@@ -1850,56 +2015,91 @@ function showVueloForm(vuelo = null) {
                     Por favor ingrese el número de vuelo.
                 </div>
             </div>
-            <div class="mb-3">
-                <label class="form-label required-label">Origen</label>
-                <input type="text" class="form-control" name="origen" 
-                       value="${vuelo?.origen || ''}" required>
-                <div class="invalid-feedback" id="origen_error">
-                    Por favor ingrese el origen del vuelo.
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Origen</label>
+                        <input type="text" class="form-control" name="origen" 
+                               value="${vuelo?.origen || ''}" required>
+                        <div class="invalid-feedback" id="origen_error">
+                            Por favor ingrese el origen del vuelo.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Destino</label>
+                        <input type="text" class="form-control" name="destino" 
+                               value="${vuelo?.destino || ''}" required>
+                        <div class="invalid-feedback" id="destino_error">
+                            Por favor ingrese el destino del vuelo.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Fecha del Vuelo</label>
+                        <input type="date" class="form-control" name="fecha_vuelo" 
+                               value="${vuelo?.fecha_vuelo ? formatFechaForInput(vuelo.fecha_vuelo) : ''}" required>
+                        <div class="invalid-feedback" id="fecha_vuelo_error">
+                            Por favor seleccione la fecha del vuelo.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Hora de Salida</label>
+                        <input type="time" class="form-control" name="hora_salida" 
+                               value="${vuelo?.hora_salida || ''}" required>
+                        <div class="invalid-feedback" id="hora_salida_error">
+                            Por favor seleccione la hora de salida.
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Avión</label>
+                        <select class="form-control" name="codigo_avion" required>
+                            <option value="">Seleccionar avión</option>
+                            ${avionesOptions}
+                        </select>
+                        <div class="invalid-feedback" id="codigo_avion_error">
+                            Por favor seleccione un avión.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label class="form-label required-label">Piloto</label>
+                        <select class="form-control" name="codigo_piloto" required>
+                            <option value="">Seleccionar piloto</option>
+                            ${pilotosOptions}
+                        </select>
+                        <div class="invalid-feedback" id="codigo_piloto_error">
+                            Por favor seleccione un piloto.
+                        </div>
+                    </div>
                 </div>
             </div>
             <div class="mb-3">
-                <label class="form-label required-label">Destino</label>
-                <input type="text" class="form-control" name="destino" 
-                       value="${vuelo?.destino || ''}" required>
-                <div class="invalid-feedback" id="destino_error">
-                    Por favor ingrese el destino del vuelo.
+                <label class="form-label required-label">Tripulación</label>
+                <div class="mb-2">
+                    <small class="text-muted">Seleccione los tripulantes asignados a este vuelo:</small>
+                    <span id="contadorTripulacion" class="badge bg-info float-end">
+                        ${contadorSeleccionados} seleccionado(s)
+                    </span>
                 </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label required-label">Fecha del Vuelo</label>
-                <input type="date" class="form-control" name="fecha_vuelo" 
-                       value="${vuelo?.fecha_vuelo ? formatFechaForInput(vuelo.fecha_vuelo) : ''}" required>
-                <div class="invalid-feedback" id="fecha_vuelo_error">
-                    Por favor seleccione la fecha del vuelo.
+                ${tripulacionCheckboxes}
+                <div class="invalid-feedback" id="codigos_tripulacion_error">
+                    Por favor seleccione al menos un tripulante.
                 </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label required-label">Hora de Salida</label>
-                <input type="time" class="form-control" name="hora_salida" 
-                       value="${vuelo?.hora_salida || ''}" required>
-                <div class="invalid-feedback" id="hora_salida_error">
-                    Por favor seleccione la hora de salida.
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label required-label">Avión</label>
-                <select class="form-control" name="codigo_avion" required>
-                    <option value="">Seleccionar avión</option>
-                    ${avionesOptions}
-                </select>
-                <div class="invalid-feedback" id="codigo_avion_error">
-                    Por favor seleccione un avión.
-                </div>
-            </div>
-            <div class="mb-3">
-                <label class="form-label required-label">Piloto</label>
-                <select class="form-control" name="codigo_piloto" required>
-                    <option value="">Seleccionar piloto</option>
-                    ${pilotosOptions}
-                </select>
-                <div class="invalid-feedback" id="codigo_piloto_error">
-                    Por favor seleccione un piloto.
+                <div class="form-text mt-2">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Puede seleccionar múltiples tripulantes marcando las casillas correspondientes
                 </div>
             </div>
             <div class="mb-3">
@@ -1923,6 +2123,48 @@ function showVueloForm(vuelo = null) {
     setTimeout(() => {
         console.log('Configurando validación para vueloForm');
         setupRealTimeValidation('vueloForm');
+        
+        // Agregar funcionalidad para actualizar el contador de tripulantes
+        const checkboxes = document.querySelectorAll('.tripulacion-checkbox');
+        const contador = document.getElementById('contadorTripulacion');
+        
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const seleccionados = document.querySelectorAll('.tripulacion-checkbox:checked').length;
+                contador.textContent = `${seleccionados} seleccionado(s)`;
+                
+                // Validar si hay al menos un tripulante seleccionado
+                const form = document.getElementById('vueloForm');
+                const errorElement = document.getElementById('codigos_tripulacion_error');
+                
+                if (seleccionados === 0) {
+                    errorElement.style.display = 'block';
+                    errorElement.textContent = 'Por favor seleccione al menos un tripulante.';
+                } else {
+                    errorElement.style.display = 'none';
+                }
+            });
+        });
+        
+        // Agregar validación personalizada para checkboxes
+        const vueloForm = document.getElementById('vueloForm');
+        if (vueloForm) {
+            const originalCheckValidity = vueloForm.checkValidity;
+            
+            vueloForm.checkValidity = function() {
+                const seleccionados = document.querySelectorAll('.tripulacion-checkbox:checked').length;
+                
+                if (seleccionados === 0) {
+                    const errorElement = document.getElementById('codigos_tripulacion_error');
+                    errorElement.style.display = 'block';
+                    errorElement.textContent = 'Por favor seleccione al menos un tripulante.';
+                    return false;
+                }
+                
+                return originalCheckValidity.call(this);
+            };
+        }
+        
     }, 100);
 }
 
@@ -1932,8 +2174,20 @@ async function submitVueloForm(vuelo) {
         return;
     }
     
+    // Validación personalizada para tripulación (al menos un checkbox seleccionado)
+    const checkboxesSeleccionados = document.querySelectorAll('.tripulacion-checkbox:checked');
+    if (checkboxesSeleccionados.length === 0) {
+        const errorElement = document.getElementById('codigos_tripulacion_error');
+        errorElement.style.display = 'block';
+        errorElement.textContent = 'Por favor seleccione al menos un tripulante.';
+        return;
+    }
+    
     const form = document.getElementById('vueloForm');
     const formData = new FormData(form);
+    
+    // Obtener los valores de tripulación seleccionados de los checkboxes
+    const codigosTripulacion = Array.from(checkboxesSeleccionados).map(checkbox => checkbox.value);
     
     const input = {
         numero_vuelo: formData.get('numero_vuelo'),
@@ -1943,8 +2197,11 @@ async function submitVueloForm(vuelo) {
         hora_salida: formData.get('hora_salida'),
         codigo_avion: formData.get('codigo_avion'),
         codigo_piloto: formData.get('codigo_piloto'),
-        estado: formData.get('estado')
+        estado: formData.get('estado'),
+        codigos_tripulacion: codigosTripulacion.filter(codigo => codigo !== '') // Filtrar valores vacíos
     };
+    
+    console.log('Datos a enviar:', input);
     
     try {
         if (vuelo) {
@@ -1971,6 +2228,7 @@ async function submitVueloForm(vuelo) {
         loadVuelos();
         alert('Vuelo guardado exitosamente');
     } catch (error) {
+        console.error('Error guardando vuelo:', error);
         alert('Error guardando vuelo: ' + error.message);
     }
 }
@@ -1979,7 +2237,7 @@ async function editVuelo(numeroVuelo) {
     try {
         console.log('Editando vuelo:', numeroVuelo);
         
-        // Primero cargar los datos del vuelo
+        // Primero cargar los datos del vuelo con su tripulación
         const query = `
             query GetVuelo($numeroVuelo: String!) {
                 vuelo(numero_vuelo: $numeroVuelo) {
@@ -1991,6 +2249,10 @@ async function editVuelo(numeroVuelo) {
                     codigo_avion
                     codigo_piloto
                     estado
+                    tripulacion {
+                        codigo_tripulante
+                        nombre
+                    }
                 }
             }
         `;
@@ -2007,7 +2269,12 @@ async function editVuelo(numeroVuelo) {
         // Asegurarse de que tenemos aviones y pilotos cargados
         if (appState.aviones.length === 0 || appState.pilotos.length === 0) {
             // Si no tenemos datos, cargarlos primero
-            await loadVuelos(); // Esto también carga aviones y pilotos
+            await loadVuelos();
+        }
+        
+        // Asegurarse de que tenemos tripulación cargada
+        if (appState.tripulacion.length === 0) {
+            await loadTripulacion();
         }
         
         // Mostrar el formulario con los datos del vuelo

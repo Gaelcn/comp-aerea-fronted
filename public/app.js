@@ -10,6 +10,22 @@ let appState = {
     tiposAvion: []
 };
 
+// Función para mostrar mensajes de error
+function showErrorMessage(title, message, details = null) {
+    const modalContent = `
+        <div class="alert alert-danger">
+            <h5 class="alert-heading">
+                <i class="fas fa-exclamation-triangle me-2"></i>
+                ${title}
+            </h5>
+            <p>${message}</p>
+            ${details ? `<p class="mb-0"><strong>Detalles:</strong> ${details}</p>` : ''}
+        </div>
+    `;
+    
+    showModal('Error', modalContent, null);
+}
+
 async function ensureVueloDataLoaded() {
     // Si ya tenemos datos, no hacer nada
     if (appState.aviones.length > 0 && appState.pilotos.length > 0) {
@@ -1312,8 +1328,77 @@ async function editAvion(codigoAvion) {
 }
 
 async function deleteAvion(codigoAvion) {
-    if (confirm('¿Está seguro de eliminar este avión?')) {
-        try {
+    try {
+        // Primero verificar si el avión tiene vuelos asignados
+        const checkQuery = `
+            query AvionTieneVuelos($codigoAvion: String!) {
+                avionTieneVuelos(codigo_avion: $codigoAvion)
+            }
+        `;
+        
+        const checkData = await graphqlQuery(checkQuery, { codigoAvion });
+        
+        if (checkData.avionTieneVuelos) {
+            // Obtener información del avión para mostrar en el mensaje
+            const avionQuery = `
+                query GetAvion($codigoAvion: String!) {
+                    avion(codigo_avion: $codigoAvion) {
+                        codigo_avion
+                        codigo_tipo
+                    }
+                }
+            `;
+            
+            const avionData = await graphqlQuery(avionQuery, { codigoAvion });
+            const avion = avionData.avion;
+            
+            // Obtener vuelos asignados (sin parámetro, filtramos en el frontend)
+            const vuelosQuery = `
+                query {
+                    vuelos {
+                        numero_vuelo
+                        origen
+                        destino
+                        estado
+                        fecha_vuelo
+                        codigo_avion
+                    }
+                }
+            `;
+            
+            const vuelosData = await graphqlQuery(vuelosQuery);
+            const vuelosAsignados = vuelosData.vuelos.filter(v => v.codigo_avion === codigoAvion);
+            
+            const mensaje = `
+                <div class="alert alert-danger">
+                    <h5 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No se puede eliminar el avión <strong>${avion?.codigo_avion || codigoAvion}</strong>
+                    </h5>
+                    <p>Este avión tiene <strong>${vuelosAsignados.length}</strong> vuelo(s) asignado(s).</p>
+                    <hr>
+                    <p class="mb-1"><strong>Vuelos asignados:</strong></p>
+                    <ul class="small">
+                        ${vuelosAsignados.map(v => 
+                            `<li>${v.numero_vuelo}: ${v.origen} → ${v.destino} (${v.estado}) - ${formatFechaVuelo(v.fecha_vuelo)}</li>`
+                        ).join('')}
+                    </ul>
+                    <p class="mb-0 mt-2">
+                        Para eliminar este avión, primero debe reasignar o eliminar sus vuelos.
+                        <br>
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="showSection('vuelos'); bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();">
+                            <i class="fas fa-route me-1"></i> Ir a Vuelos
+                        </button>
+                    </p>
+                </div>
+            `;
+            
+            showModal('No se puede eliminar', mensaje, null);
+            return;
+        }
+        
+        // Si no tiene vuelos, proceder con la eliminación
+        if (confirm('¿Está seguro de eliminar este avión? Esta acción no se puede deshacer.')) {
             const mutation = `
                 mutation EliminarAvion($codigoAvion: String!) {
                     eliminarAvion(codigo_avion: $codigoAvion)
@@ -1321,10 +1406,18 @@ async function deleteAvion(codigoAvion) {
             `;
             await graphqlQuery(mutation, { codigoAvion });
             loadAviones();
+            
+            // También actualizar dashboard si está visible
+            const currentSection = document.querySelector('.content-section[style="display: block;"]');
+            if (currentSection && currentSection.id === 'dashboard') {
+                loadDashboard();
+            }
+            
             alert('Avión eliminado exitosamente');
-        } catch (error) {
-            alert('Error eliminando avión: ' + error.message);
         }
+    } catch (error) {
+        console.error('Error eliminando avión:', error);
+        alert('Error eliminando avión: ' + error.message);
     }
 }
 
@@ -1339,7 +1432,11 @@ async function loadPilotos() {
                     horas_vuelo
                     codigo_base
                     fecha_contratacion
-                    base { nombre_base }
+                    base {
+                        codigo_base
+                        nombre_base
+                        ubicacion
+                    }
                 }
                 bases {
                     codigo_base
@@ -1511,8 +1608,77 @@ async function editPiloto(codigoPiloto) {
 }
 
 async function deletePiloto(codigoPiloto) {
-    if (confirm('¿Está seguro de eliminar este piloto?')) {
-        try {
+    try {
+        // Primero verificar si el piloto tiene vuelos asignados
+        const checkQuery = `
+            query PilotoTieneVuelos($codigoPiloto: String!) {
+                pilotoTieneVuelos(codigo_piloto: $codigoPiloto)
+            }
+        `;
+        
+        const checkData = await graphqlQuery(checkQuery, { codigoPiloto });
+        
+        if (checkData.pilotoTieneVuelos) {
+            // Obtener información del piloto para mostrar en el mensaje
+            const pilotoQuery = `
+                query GetPiloto($codigoPiloto: String!) {
+                    piloto(codigo_piloto: $codigoPiloto) {
+                        codigo_piloto
+                        nombre
+                    }
+                }
+            `;
+            
+            const pilotoData = await graphqlQuery(pilotoQuery, { codigoPiloto });
+            const piloto = pilotoData.piloto;
+            
+            // Obtener vuelos asignados (sin parámetro, filtramos en el frontend)
+            const vuelosQuery = `
+                query {
+                    vuelos {
+                        numero_vuelo
+                        origen
+                        destino
+                        estado
+                        fecha_vuelo
+                        codigo_piloto
+                    }
+                }
+            `;
+            
+            const vuelosData = await graphqlQuery(vuelosQuery);
+            const vuelosAsignados = vuelosData.vuelos.filter(v => v.codigo_piloto === codigoPiloto);
+            
+            const mensaje = `
+                <div class="alert alert-danger">
+                    <h5 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No se puede eliminar el piloto <strong>${piloto?.nombre || 'Desconocido'} (${piloto?.codigo_piloto || codigoPiloto})</strong>
+                    </h5>
+                    <p>Este piloto tiene <strong>${vuelosAsignados.length}</strong> vuelo(s) asignado(s).</p>
+                    <hr>
+                    <p class="mb-1"><strong>Vuelos asignados:</strong></p>
+                    <ul class="small">
+                        ${vuelosAsignados.map(v => 
+                            `<li>${v.numero_vuelo}: ${v.origen} → ${v.destino} (${v.estado}) - ${formatFechaVuelo(v.fecha_vuelo)}</li>`
+                        ).join('')}
+                    </ul>
+                    <p class="mb-0 mt-2">
+                        Para eliminar este piloto, primero debe reasignar o eliminar sus vuelos.
+                        <br>
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="showSection('vuelos'); bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();">
+                            <i class="fas fa-route me-1"></i> Ir a Vuelos
+                        </button>
+                    </p>
+                </div>
+            `;
+            
+            showModal('No se puede eliminar', mensaje, null);
+            return;
+        }
+        
+        // Si no tiene vuelos, proceder con la eliminación
+        if (confirm('¿Está seguro de eliminar este piloto? Esta acción no se puede deshacer.')) {
             const mutation = `
                 mutation EliminarPiloto($codigoPiloto: String!) {
                     eliminarPiloto(codigo_piloto: $codigoPiloto)
@@ -1520,10 +1686,18 @@ async function deletePiloto(codigoPiloto) {
             `;
             await graphqlQuery(mutation, { codigoPiloto });
             loadPilotos();
+            
+            // También actualizar dashboard si está visible
+            const currentSection = document.querySelector('.content-section[style="display: block;"]');
+            if (currentSection && currentSection.id === 'dashboard') {
+                loadDashboard();
+            }
+            
             alert('Piloto eliminado exitosamente');
-        } catch (error) {
-            alert('Error eliminando piloto: ' + error.message);
         }
+    } catch (error) {
+        console.error('Error eliminando piloto:', error);
+        alert('Error eliminando piloto: ' + error.message);
     }
 }
 
@@ -1537,7 +1711,11 @@ async function loadTripulacion() {
                     nombre
                     codigo_base
                     fecha_contratacion
-                    base { nombre_base }
+                    base {
+                        codigo_base
+                        nombre_base
+                        ubicacion
+                    }
                 }
             }
         `;
@@ -1694,8 +1872,81 @@ async function editTripulante(codigoTripulante) {
 }
 
 async function deleteTripulante(codigoTripulante) {
-    if (confirm('¿Está seguro de eliminar este tripulante?')) {
-        try {
+    try {
+        // Primero verificar si el tripulante tiene vuelos asignados
+        const checkQuery = `
+            query TripulanteTieneVuelos($codigoTripulante: String!) {
+                tripulanteTieneVuelos(codigo_tripulante: $codigoTripulante)
+            }
+        `;
+        
+        const checkData = await graphqlQuery(checkQuery, { codigoTripulante });
+        
+        if (checkData.tripulanteTieneVuelos) {
+            // Obtener información del tripulante para mostrar en el mensaje
+            const tripulanteQuery = `
+                query GetTripulante($codigoTripulante: String!) {
+                    tripulante(codigo_tripulante: $codigoTripulante) {
+                        codigo_tripulante
+                        nombre
+                    }
+                }
+            `;
+            
+            const tripulanteData = await graphqlQuery(tripulanteQuery, { codigoTripulante });
+            const tripulante = tripulanteData.tripulante;
+            
+            // Obtener vuelos asignados (sin parámetro, filtramos en el frontend)
+            const vuelosQuery = `
+                query {
+                    vuelos {
+                        numero_vuelo
+                        origen
+                        destino
+                        estado
+                        fecha_vuelo
+                        tripulacion {
+                            codigo_tripulante
+                        }
+                    }
+                }
+            `;
+            
+            const vuelosData = await graphqlQuery(vuelosQuery);
+            const vuelosAsignados = vuelosData.vuelos.filter(v => 
+                v.tripulacion && v.tripulacion.some(t => t.codigo_tripulante === codigoTripulante)
+            );
+            
+            const mensaje = `
+                <div class="alert alert-danger">
+                    <h5 class="alert-heading">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No se puede eliminar el tripulante <strong>${tripulante?.nombre || 'Desconocido'} (${tripulante?.codigo_tripulante || codigoTripulante})</strong>
+                    </h5>
+                    <p>Este tripulante está asignado a <strong>${vuelosAsignados.length}</strong> vuelo(s).</p>
+                    <hr>
+                    <p class="mb-1"><strong>Vuelos asignados:</strong></p>
+                    <ul class="small">
+                        ${vuelosAsignados.map(v => 
+                            `<li>${v.numero_vuelo}: ${v.origen} → ${v.destino} (${v.estado}) - ${formatFechaVuelo(v.fecha_vuelo)}</li>`
+                        ).join('')}
+                    </ul>
+                    <p class="mb-0 mt-2">
+                        Para eliminar este tripulante, primero debe removerlo de sus vuelos asignados.
+                        <br>
+                        <button class="btn btn-sm btn-outline-primary mt-2" onclick="showSection('vuelos'); bootstrap.Modal.getInstance(document.getElementById('formModal')).hide();">
+                            <i class="fas fa-route me-1"></i> Ir a Vuelos
+                        </button>
+                    </p>
+                </div>
+            `;
+            
+            showModal('No se puede eliminar', mensaje, null);
+            return;
+        }
+        
+        // Si no tiene vuelos, proceder con la eliminación
+        if (confirm('¿Está seguro de eliminar este tripulante? Esta acción no se puede deshacer.')) {
             const mutation = `
                 mutation EliminarTripulante($codigoTripulante: String!) {
                     eliminarTripulante(codigo_tripulante: $codigoTripulante)
@@ -1703,10 +1954,18 @@ async function deleteTripulante(codigoTripulante) {
             `;
             await graphqlQuery(mutation, { codigoTripulante });
             loadTripulacion();
+            
+            // También actualizar dashboard si está visible
+            const currentSection = document.querySelector('.content-section[style="display: block;"]');
+            if (currentSection && currentSection.id === 'dashboard') {
+                loadDashboard();
+            }
+            
             alert('Tripulante eliminado exitosamente');
-        } catch (error) {
-            alert('Error eliminando tripulante: ' + error.message);
         }
+    } catch (error) {
+        console.error('Error eliminando tripulante:', error);
+        alert('Error eliminando tripulante: ' + error.message);
     }
 }
 
@@ -1739,14 +1998,27 @@ async function loadVuelos() {
         
         appState.vuelos = data.vuelos || [];
         
-        // Ahora cargar aviones, pilotos y tripulación por separado si no los tenemos
+        // Ahora cargar información COMPLETA de aviones, pilotos y tripulación
         if (!appState.aviones || appState.aviones.length === 0) {
-            console.log('Cargando aviones...');
+            console.log('Cargando aviones con información de base...');
             try {
-                const avionesQuery = `query { aviones { codigo_avion codigo_tipo } }`;
+                const avionesQuery = `
+                    query {
+                        aviones {
+                            codigo_avion
+                            codigo_tipo
+                            codigo_base
+                            base {
+                                codigo_base
+                                nombre_base
+                                ubicacion
+                            }
+                        }
+                    }
+                `;
                 const avionesData = await graphqlQuery(avionesQuery);
                 appState.aviones = avionesData.aviones || [];
-                console.log('Aviones cargados:', appState.aviones);
+                console.log('Aviones cargados con base:', appState.aviones);
             } catch (error) {
                 console.error('Error cargando aviones:', error);
                 appState.aviones = [];
@@ -1754,12 +2026,26 @@ async function loadVuelos() {
         }
         
         if (!appState.pilotos || appState.pilotos.length === 0) {
-            console.log('Cargando pilotos...');
+            console.log('Cargando pilotos con información de base...');
             try {
-                const pilotosQuery = `query { pilotos { codigo_piloto nombre } }`;
+                const pilotosQuery = `
+                    query {
+                        pilotos {
+                            codigo_piloto
+                            nombre
+                            horas_vuelo
+                            codigo_base
+                            base {
+                                codigo_base
+                                nombre_base
+                                ubicacion
+                            }
+                        }
+                    }
+                `;
                 const pilotosData = await graphqlQuery(pilotosQuery);
                 appState.pilotos = pilotosData.pilotos || [];
-                console.log('Pilotos cargados:', appState.pilotos);
+                console.log('Pilotos cargados con base:', appState.pilotos);
             } catch (error) {
                 console.error('Error cargando pilotos:', error);
                 appState.pilotos = [];
@@ -1767,7 +2053,7 @@ async function loadVuelos() {
         }
         
         if (!appState.tripulacion || appState.tripulacion.length === 0) {
-            console.log('Cargando tripulación...');
+            console.log('Cargando tripulación con información de base...');
             try {
                 await loadTripulacion();
             } catch (error) {
@@ -1926,6 +2212,17 @@ function showVueloForm(vuelo = null) {
         return;
     }
     
+    // Obtener información del avión seleccionado (para edición)
+    let avionSeleccionado = null;
+    let codigoBaseAvion = null;
+    
+    if (isEdit && vuelo && vuelo.codigo_avion) {
+        avionSeleccionado = appState.aviones.find(a => a.codigo_avion === vuelo.codigo_avion);
+        if (avionSeleccionado) {
+            codigoBaseAvion = avionSeleccionado.codigo_base || avionSeleccionado.base?.codigo_base;
+        }
+    }
+    
     // Obtener tripulación asignada actualmente (para edición)
     let tripulacionAsignada = [];
     if (isEdit && vuelo && vuelo.tripulacion) {
@@ -1936,40 +2233,44 @@ function showVueloForm(vuelo = null) {
     const avionesOptions = appState.aviones.map(avion => {
         const codigo = avion?.codigo_avion || 'N/A';
         const tipo = avion?.codigo_tipo || '';
+        const baseNombre = avion?.base?.nombre_base || avion?.codigo_base || 'Sin base';
         const selected = vuelo?.codigo_avion === codigo ? 'selected' : '';
         
-        return `<option value="${codigo}" ${selected}>
-            ${codigo} ${tipo ? `(${tipo})` : ''}
+        return `<option value="${codigo}" data-base="${avion?.codigo_base || ''}" ${selected}>
+            ${codigo} ${tipo ? `(${tipo})` : ''} - Base: ${baseNombre}
         </option>`;
     }).join('');
     
-    // Crear opciones para pilotos
+    // Crear opciones para pilotos (inicialmente todas, se filtrarán cuando se seleccione avión)
     const pilotosOptions = appState.pilotos.map(piloto => {
         const codigo = piloto?.codigo_piloto || 'N/A';
         const nombre = piloto?.nombre || 'Desconocido';
+        const baseNombre = piloto?.base?.nombre_base || piloto?.codigo_base || 'Sin base';
         const selected = vuelo?.codigo_piloto === codigo ? 'selected' : '';
+        const basePiloto = piloto?.codigo_base || piloto?.base?.codigo_base || '';
         
-        return `<option value="${codigo}" ${selected}>
-            ${nombre} (${codigo})
+        return `<option value="${codigo}" data-base="${basePiloto}" ${selected}>
+            ${nombre} (${codigo}) - Base: ${baseNombre}
         </option>`;
     }).join('');
     
-    // Crear checkboxes para tripulación
+    // Crear checkboxes para tripulación (inicialmente todas, se filtrarán cuando se seleccione avión)
     let tripulacionCheckboxes = '';
     if (appState.tripulacion && appState.tripulacion.length > 0) {
         tripulacionCheckboxes = `
             <div class="tripulacion-checkbox-container" style="max-height: 200px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 5px; padding: 10px; margin-top: 5px;">
-                <div class="row g-2">
+                <div class="row g-2" id="tripulacionContainer">
         `;
         
         appState.tripulacion.forEach((tripulante, index) => {
             const codigo = tripulante?.codigo_tripulante || 'N/A';
             const nombre = tripulante?.nombre || 'Desconocido';
-            const base = tripulante?.base?.nombre_base || tripulante?.codigo_base || '';
+            const baseNombre = tripulante?.base?.nombre_base || tripulante?.codigo_base || 'Sin base';
+            const baseTripulante = tripulante?.codigo_base || tripulante?.base?.codigo_base || '';
             const checked = tripulacionAsignada.includes(codigo) ? 'checked' : '';
             
             tripulacionCheckboxes += `
-                <div class="col-md-6 col-lg-4">
+                <div class="col-md-6 col-lg-4 tripulante-item" data-base="${baseTripulante}">
                     <div class="form-check">
                         <input class="form-check-input tripulacion-checkbox" 
                                type="checkbox" 
@@ -1980,7 +2281,7 @@ function showVueloForm(vuelo = null) {
                         <label class="form-check-label" for="tripulante_${index}">
                             <small>
                                 <strong>${nombre}</strong><br>
-                                <span class="text-muted">${codigo} - ${base}</span>
+                                <span class="text-muted">${codigo} - Base: ${baseNombre}</span>
                             </small>
                         </label>
                     </div>
@@ -1990,6 +2291,12 @@ function showVueloForm(vuelo = null) {
         
         tripulacionCheckboxes += `
                 </div>
+            </div>
+            <div class="mt-2">
+                <small class="text-info" id="filtroBaseInfo">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Mostrando todos los tripulantes disponibles
+                </small>
             </div>
         `;
     } else {
@@ -2063,24 +2370,34 @@ function showVueloForm(vuelo = null) {
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label class="form-label required-label">Avión</label>
-                        <select class="form-control" name="codigo_avion" required>
+                        <select class="form-control" name="codigo_avion" id="selectAvion" required>
                             <option value="">Seleccionar avión</option>
                             ${avionesOptions}
                         </select>
                         <div class="invalid-feedback" id="codigo_avion_error">
                             Por favor seleccione un avión.
                         </div>
+                        <div class="form-text" id="infoBaseAvion">
+                            <i class="fas fa-info-circle me-1"></i>
+                            Al seleccionar un avión, solo se mostrarán pilotos y tripulación de la misma base
+                        </div>
                     </div>
                 </div>
                 <div class="col-md-6">
                     <div class="mb-3">
                         <label class="form-label required-label">Piloto</label>
-                        <select class="form-control" name="codigo_piloto" required>
+                        <select class="form-control" name="codigo_piloto" id="selectPiloto" required>
                             <option value="">Seleccionar piloto</option>
                             ${pilotosOptions}
                         </select>
                         <div class="invalid-feedback" id="codigo_piloto_error">
                             Por favor seleccione un piloto.
+                        </div>
+                        <div class="form-text" id="infoPilotosFiltrados">
+                            <i class="fas fa-filter me-1"></i>
+                            ${codigoBaseAvion ? 
+                                `Filtrado por base: ${appState.bases.find(b => b.codigo_base === codigoBaseAvion)?.nombre_base || codigoBaseAvion}` : 
+                                'Seleccione un avión primero'}
                         </div>
                     </div>
                 </div>
@@ -2096,10 +2413,6 @@ function showVueloForm(vuelo = null) {
                 ${tripulacionCheckboxes}
                 <div class="invalid-feedback" id="codigos_tripulacion_error">
                     Por favor seleccione al menos un tripulante.
-                </div>
-                <div class="form-text mt-2">
-                    <i class="fas fa-info-circle me-1"></i>
-                    Puede seleccionar múltiples tripulantes marcando las casillas correspondientes
                 </div>
             </div>
             <div class="mb-3">
@@ -2123,6 +2436,121 @@ function showVueloForm(vuelo = null) {
     setTimeout(() => {
         console.log('Configurando validación para vueloForm');
         setupRealTimeValidation('vueloForm');
+        
+        // Función para filtrar pilotos y tripulación por base
+        function filtrarPorBase(codigoBase) {
+            console.log('Filtrando por base:', codigoBase);
+            
+            // Filtrar pilotos
+            const selectPiloto = document.getElementById('selectPiloto');
+            if (selectPiloto) {
+                const optionsPiloto = selectPiloto.querySelectorAll('option');
+                let pilotosDisponibles = 0;
+                
+                optionsPiloto.forEach(option => {
+                    if (option.value === '') {
+                        // Opción "Seleccionar piloto" siempre visible
+                        option.style.display = '';
+                        option.disabled = false;
+                    } else {
+                        const basePiloto = option.getAttribute('data-base');
+                        if (codigoBase && basePiloto !== codigoBase) {
+                            option.style.display = 'none';
+                            option.disabled = true;
+                        } else {
+                            option.style.display = '';
+                            option.disabled = false;
+                            pilotosDisponibles++;
+                        }
+                    }
+                });
+                
+                // Actualizar información
+                const infoPilotos = document.getElementById('infoPilotosFiltrados');
+                if (infoPilotos) {
+                    const baseInfo = appState.bases.find(b => b.codigo_base === codigoBase);
+                    const baseNombre = baseInfo ? baseInfo.nombre_base : codigoBase;
+                    
+                    if (codigoBase) {
+                        infoPilotos.innerHTML = `
+                            <i class="fas fa-filter me-1"></i>
+                            Filtrado por base: <strong>${baseNombre}</strong> 
+                            (${pilotosDisponibles} piloto(s) disponible(s))
+                        `;
+                    } else {
+                        infoPilotos.innerHTML = `
+                            <i class="fas fa-filter me-1"></i>
+                            Mostrando todos los pilotos (${pilotosDisponibles} disponible(s))
+                        `;
+                    }
+                }
+            }
+            
+            // Filtrar tripulación
+            const tripulacionContainer = document.getElementById('tripulacionContainer');
+            const filtroBaseInfo = document.getElementById('filtroBaseInfo');
+            
+            if (tripulacionContainer && filtroBaseInfo) {
+                const itemsTripulacion = tripulacionContainer.querySelectorAll('.tripulante-item');
+                let tripulantesDisponibles = 0;
+                
+                itemsTripulacion.forEach(item => {
+                    const baseTripulante = item.getAttribute('data-base');
+                    if (codigoBase && baseTripulante !== codigoBase) {
+                        item.style.display = 'none';
+                    } else {
+                        item.style.display = '';
+                        tripulantesDisponibles++;
+                    }
+                });
+                
+                // Actualizar información
+                if (codigoBase) {
+                    const baseInfo = appState.bases.find(b => b.codigo_base === codigoBase);
+                    const baseNombre = baseInfo ? baseInfo.nombre_base : codigoBase;
+                    filtroBaseInfo.innerHTML = `
+                        <i class="fas fa-filter me-1"></i>
+                        Filtrado por base: <strong>${baseNombre}</strong> 
+                        (${tripulantesDisponibles} tripulante(s) disponible(s))
+                    `;
+                    filtroBaseInfo.className = 'text-info';
+                } else {
+                    filtroBaseInfo.innerHTML = `
+                        <i class="fas fa-info-circle me-1"></i>
+                        Mostrando todos los tripulantes (${tripulantesDisponibles} disponible(s))
+                    `;
+                    filtroBaseInfo.className = 'text-info';
+                }
+            }
+        }
+        
+        // Event listener para el cambio de avión
+        const selectAvion = document.getElementById('selectAvion');
+        if (selectAvion) {
+            selectAvion.addEventListener('change', function() {
+                const selectedOption = this.options[this.selectedIndex];
+                const codigoBase = selectedOption.getAttribute('data-base');
+                
+                // Filtrar pilotos y tripulación por la base del avión seleccionado
+                filtrarPorBase(codigoBase);
+                
+                // Actualizar información de la base del avión
+                const infoBaseAvion = document.getElementById('infoBaseAvion');
+                if (infoBaseAvion && codigoBase) {
+                    const baseInfo = appState.bases.find(b => b.codigo_base === codigoBase);
+                    const baseNombre = baseInfo ? baseInfo.nombre_base : codigoBase;
+                    infoBaseAvion.innerHTML = `
+                        <i class="fas fa-info-circle me-1"></i>
+                        Avión de la base: <strong>${baseNombre}</strong>
+                    `;
+                }
+            });
+            
+            // Si estamos en modo edición y ya hay un avión seleccionado, aplicar filtro automáticamente
+            if (isEdit && avionSeleccionado && avionSeleccionado.codigo_base) {
+                filtrarPorBase(avionSeleccionado.codigo_base);
+            }
+        }
         
         // Agregar funcionalidad para actualizar el contador de tripulantes
         const checkboxes = document.querySelectorAll('.tripulacion-checkbox');

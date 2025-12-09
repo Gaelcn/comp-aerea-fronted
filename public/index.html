@@ -1062,6 +1062,66 @@
             width: 100%;
         }
     }
+    /* Estilos para mensajes de error en modal */
+    .modal-body .alert ul {
+        margin-bottom: 0;
+        padding-left: 20px;
+    }
+
+    .modal-body .alert li {
+        margin-bottom: 3px;
+    }
+
+    .modal-body .alert .btn {
+        margin-top: 10px;
+    }
+
+    /* Estilos para los botones de acción en las tablas */
+    .table-actions .btn {
+        margin: 2px;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .table-actions .btn i {
+        font-size: 0.875rem;
+    }
+    /* Estilos para el filtrado por base */
+.form-text i {
+    font-size: 0.9em;
+}
+
+#infoPilotosFiltrados, #filtroBaseInfo {
+    font-size: 0.85em;
+    padding: 5px 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+/* Resaltar elementos filtrados */
+option[style*="display: none"] {
+    display: none !important;
+}
+
+.tripulante-item[style*="display: none"] {
+    display: none !important;
+}
+
+/* Estilos para los elementos deshabilitados */
+option:disabled {
+    color: #6c757d;
+    background-color: #f8f9fa;
+}
+
+/* Mejoras para los selects */
+select.form-control option:not(:disabled) {
+    color: #212529;
+}
+
+select.form-control:focus option:checked {
+    background-color: #0d6efd;
+    color: white;
+}
 </style>
 </head>
 <body>
